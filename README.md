@@ -129,6 +129,13 @@ MCP 配置新增后，需要由 Codex 重新加载服务；当前已开始的聊
 
 上游 UI 复用的契约研究与三路比较见 [docs/upstream-ui-reuse.md](docs/upstream-ui-reuse.md)；离线轨迹原型见 `ui/prototype/`（`npm run prototype` 后打开 127.0.0.1:8791），来源与许可见 `ui/prototype/NOTICE.md`。
 
+## Agent 模型：子 agent 与 peer 的工作区规范
+
+详见 [TODO-AGENT-MODEL.md](TODO-AGENT-MODEL.md)。两条已定规范：
+
+- **peer（并行同工作区 agent）使用拷贝式独立工作区，bridge 零配置**：发起前由调用方执行 `git worktree add ../X-peer-1 -b peer-1`（非 git 目录才整目录拷贝）；peer 在拷贝区内自由书写（快照基线，运行期不随 X 演进）；完成后 peer 侧 commit，Codex 在 X `git merge` 审阅合并，`git worktree remove` 清理。干跑已验证全流程（含"产出必须先 commit 否则 merge 不到"的要点）。
+- **子 agent 任务使用派生区 `X__<task>`**：`ds_start({ subagents: true, cwd: X__<task> })`，DS 父会话在进程内并行 spawn 多子共享该区；`ds_followup` 永不接受子会话 id（子会话只进 children 清单供观测）。
+
 ## 开发流程（git）
 
 `main` 是稳定分支；基线提交打 tag `v0.1.1-baseline`。每项工作从 `main` 切出 `feature/<主题>` 或 `docs/<主题>` 分支，提交信息用 `type: 中文主题`（feat/fix/docs/test/chore），自审 diff 后以 `--no-ff` 合回 `main` 并删除特性分支。界面与协议证据保存在 `.local/<主题>-<时间戳>/review/`（git 忽略 `.local`，跨机器交接需显式复制脱敏证据）。

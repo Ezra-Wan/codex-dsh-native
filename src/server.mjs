@@ -38,11 +38,13 @@ if (arg) {
     if (enabled !== undefined) await bridge.setEnabled(enabled);
     return bridge.list();
   });
-  add('ds_start', 'Start an independent native DeepSeek Harness task asynchronously. Both modes retain native tools, workspace, history and automatic compaction. light defaults to 8192 output tokens/request; coding to 32768. These are not context-window or total-spend limits. Return immediately, continue independent parent work, then collect with ds_wait. Do not use for work outside the user-authorized scope.', {
+  add('ds_start', 'Start an independent native DeepSeek Harness task asynchronously. Both modes retain native tools, workspace, history and automatic compaction. light defaults to 8192 output tokens/request; coding to 32768. These are not context-window or total-spend limits. Return immediately, continue independent parent work, then collect with ds_wait. Do not use for work outside the user-authorized scope. role: peer works a copied workspace (git worktree of the parent repo) and may later be driven by the user in the native web UI; role: sub marks a derived X__<task> workspace whose session may spawn native subagents (subagents: true mounts the official delegation tool; children are observable via ds_events using their session ids but can never be followed up directly).', {
     task: z.string().min(1).describe('Self-contained bounded task, artifacts to produce, verification and concise final delivery.'),
     cwd: z.string().min(1).describe('Absolute task workspace; separate worktree for concurrent code writers.'),
     name: z.string().max(100).optional(),
     mode: z.enum(['light', 'coding']).default('light'),
+    role: z.enum(['sub', 'peer']).default('peer'),
+    subagents: z.boolean().default(false),
     permission: z.enum(['read-only', 'workspace-write']).default('workspace-write'),
     model: z.string().optional(),
     provider: z.string().optional(),
@@ -60,7 +62,7 @@ if (arg) {
   add('ds_stop', 'Interrupt this bridge task by closing its dedicated SDK runtime. Native history remains resumable; filesystem edits are not rolled back. Other bridge tasks continue.', {
     agent_id: agent,
   }, ({ agent_id }) => bridge.stop(agent_id));
-  add('ds_events', 'Read actual DSH tool calls, results, visible messages and turn boundaries from native session storage. Read-only, no model calls. Continue from cursor with after_seq. Omits reasoning and provider request headers. Does not itself prove that the host renders a live UI.', {
+  add('ds_events', 'Read actual DSH tool calls, results, visible messages and turn boundaries from native session storage. Read-only, no model calls. Continue from cursor with after_seq. Also accepts a native child session id (subagent) listed in a task summary — children are observation-only. Omits reasoning and provider request headers. Does not itself prove that the host renders a live UI.', {
     agent_id: agent,
     after_seq: z.number().int().min(-1).default(-1),
     limit: z.number().int().min(1).max(50).default(30),
