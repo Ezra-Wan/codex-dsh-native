@@ -2,8 +2,13 @@
   "label": "演示任务：读→写→命令失败→读回恢复",
   "session_id": "bc243aa7-57aa-47b5-b219-c73a6a45c5ed",
   "source": "native-dsh-session-log",
-  "extractedAt": "2026-10-23T12:04:01.587Z",
+  "extractedAt": "2026-10-23T13:57:30.491Z",
   "extractor": "scripts/extract-fixtures.mjs (production readNativeEvents)",
+  "meta": {
+    "mode": "light",
+    "permission": "workspace-write",
+    "name": "现场演示：五天销售汇总"
+  },
   "events": [
     {
       "seq": 4,
