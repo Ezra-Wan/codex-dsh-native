@@ -2,7 +2,7 @@
 
 对应 [TODO-HANDOFF.md](../TODO-HANDOFF.md) 优先项 2 的前半部分：先看 `ui-trajectory` / `ui-chat` 的 exports、依赖及 provider 契约；若组件必须依赖完整客户端，比较三条路并记录成本。
 
-调研日期：2026-10-23。来源为 npm 发布物（本项目 `sdk` profile 已安装，与锁定版本一致），未复制源代码。
+调研日期：2026-10-23。初版来源为 npm 发布物（本项目 `sdk` profile 已安装，与锁定版本一致）；同日已补做上游源码精读（稀疏检出 pinned commit 到 `.local/reference/dsh-upstream`），实现级结论以 [upstream-source-study.md](upstream-source-study.md) 为准，本文保持路线选择与依赖面结论。
 
 ## 版本与来源
 
