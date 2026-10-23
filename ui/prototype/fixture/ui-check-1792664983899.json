@@ -2,8 +2,13 @@
   "label": "界面小测试：读→写→读回校验通过",
   "session_id": "a87de710-cab5-4c2e-bb9d-df546c70d212",
   "source": "native-dsh-session-log",
-  "extractedAt": "2026-10-23T12:04:01.595Z",
+  "extractedAt": "2026-10-23T13:57:30.500Z",
   "extractor": "scripts/extract-fixtures.mjs (production readNativeEvents)",
+  "meta": {
+    "mode": "light",
+    "permission": "workspace-write",
+    "name": "重启后测试：可见的 DS 文件操作"
+  },
   "events": [
     {
       "seq": 4,

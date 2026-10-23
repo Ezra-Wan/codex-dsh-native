@@ -147,9 +147,9 @@ function statusLine(turn) {
   return node;
 }
 
-// Native conversation order: user bubbles, the settled-duration disclosure,
-// the process group (ChatGroupSeat header over context/skill/tool member
-// rows), then the markdown assistant text.
+// Native conversation order: user bubbles, then the settled-duration
+// disclosure — which collapses ONLY the process group (final text stays
+// visible, like the native turn process) — then the markdown assistant text.
 function renderTurn(turn) {
   const section = document.createElement('li');
   section.className = 'turn';
@@ -165,14 +165,14 @@ function renderTurn(turn) {
   head.className = 'user-stack';
   for (const record of bubbles) head.append(bubble(record));
   if (head.children.length) section.append(head);
-  const rest = document.createElement('details');
-  rest.className = 'turn-rest';
-  rest.open = true;
-  rest.append(statusLine(turn));
-  const restBody = document.createElement('div');
-  restBody.className = 'turn-rest-body';
   if (process.length) {
     const tools = process.filter(record => record.kind === 'tool');
+    const rest = document.createElement('details');
+    rest.className = 'turn-rest';
+    rest.open = true;
+    rest.append(statusLine(turn));
+    const restBody = document.createElement('div');
+    restBody.className = 'turn-rest-body';
     const group = document.createElement('details');
     group.className = 'process-group';
     group.open = true;
@@ -185,10 +185,12 @@ function renderTurn(turn) {
     body.append(list);
     group.append(body);
     restBody.append(group);
+    rest.append(restBody);
+    section.append(rest);
+  } else {
+    section.append(statusLine(turn));
   }
-  for (const record of messages) restBody.append(recordNode(record));
-  rest.append(restBody);
-  section.append(rest);
+  for (const record of messages) section.append(recordNode(record));
   return section;
 }
 

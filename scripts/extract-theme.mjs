@@ -38,7 +38,9 @@ const balanced = list => {
   return list;
 };
 
-const statics = balanced([...new Set([...css.matchAll(/--dsw-(?:static|radius|font|corner)[a-z0-9-]*:[^;{}]+/g)].map(m => m[0]))]);
+const dswStatics = [...css.matchAll(/--dsw-(?:static|radius|font|corner)[a-z0-9-]*:[^;{}]+/g)].map(m => m[0]);
+const fontFamilyVars = [...css.matchAll(/--(?:dsh|ds)-font-family[a-z0-9-]*:[^;{}]+/g)].map(m => m[0]);
+const statics = balanced([...new Set([...dswStatics, ...fontFamilyVars])]);
 const light = balanced(declarations(enclosingRule('--dsw-alias-bg-layer-1:var(--dsw-static-neutral-bluish-00)')));
 const dark = balanced(declarations(enclosingRule('--dsw-alias-bg-layer-1:var(--dsw-static-neutral-bluish-875)')));
 
