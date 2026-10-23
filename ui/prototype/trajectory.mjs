@@ -1,109 +1,156 @@
-// Minimal ledger renderer: native-style turn grouping, paired tool records,
-// error retention and tail following, on the existing card's CSS variables.
-import { buildLedger, taskTitle, toolTitle } from './records.mjs';
+// Chat-form renderer following the native conversation view: right-aligned
+// user bubbles, compact hairline process rows, free-flowing assistant text,
+// and a collapsible per-turn status line. Tail-follow logic is unchanged.
+import { buildLedger, toolTitle } from './records.mjs';
 
-const time = value => new Date(value).toLocaleTimeString('zh-CN', { hour12: false });
+const clock = value => new Date(value).toLocaleTimeString('zh-CN', { hour12: false });
 const REASON_LABELS = { completed: '已完成', aborted: '已中止', interrupted: '已中断', 'max-tokens': '达到输出上限' };
-// Record-kind tags mirror the native ledger palette: user green, context muted
-// green, assistant brand blue, tool amber, failures red.
-const TAGS = {
-  task: { cls: 'tagUser', label: '用户' },
-  context: { cls: 'tagContext', label: '上下文' },
-  skill: { cls: 'tagContext', label: '技能' },
-  message: { cls: 'tagMessage', label: '回复' },
-  tool: { cls: 'tagTool', label: '工具' },
-};
-const STATE_LABELS = { ok: '结果', error: '异常', pending: '进行中', interrupted: '已中断' };
+const TOOL_LABELS = { read: '读取', write: '写入', edit: '修改', pwsh: '运行命令' };
 
-function detailBlock(text, truncated, mono) {
-  const node = document.createElement('pre');
-  if (mono) node.className = 'mono';
-  node.textContent = text + (truncated ? '\n…' : '');
+function duration(from, to) {
+  const seconds = Math.max(1, Math.round((new Date(to) - new Date(from)) / 1000));
+  if (seconds < 60) return `${seconds} 秒`;
+  return `${Math.floor(seconds / 60)} 分 ${seconds % 60} 秒`;
+}
+
+function chevron() {
+  const node = document.createElement('span');
+  node.className = 'chevron';
+  node.setAttribute('aria-hidden', 'true');
   return node;
 }
 
-function renderRecord(record, index) {
+// One compact process row: chevron · label · summary, hairline separated.
+function processRow({ label, summary, open = false, failed = false, bodies = [] }) {
   const li = document.createElement('li');
-  const failed = record.state === 'error' || record.state === 'interrupted';
-  li.className = 'record';
-  li.dataset.kind = record.kind;
-  li.dataset.state = record.state ?? '';
+  li.className = 'process-row';
+  if (failed) li.classList.add('failed');
   const details = document.createElement('details');
-  details.open = failed || record.kind !== 'tool';
-  const summary = document.createElement('summary');
-  summary.className = 'row';
-  const idx = document.createElement('span');
-  idx.className = 'idx';
-  idx.textContent = `#${index}`;
-  const tag = document.createElement('span');
-  let tagKey = record.kind;
-  if (record.kind === 'task') tagKey = record.sourceKind === 'user' ? 'task' : record.sourceKind === 'skill-catalog' ? 'skill' : 'context';
-  if (failed) { tag.className = 'tag tagError'; tag.textContent = STATE_LABELS[record.state]; }
-  else { tag.className = `tag ${TAGS[tagKey].cls}`; tag.textContent = TAGS[tagKey].label; }
-  const text = document.createElement('span');
-  text.className = 'cell-text';
-  if (record.kind === 'tool') {
-    const { label, path } = toolTitle(record);
-    text.textContent = path ? `${label} · ${path}` : label;
-  } else if (record.kind === 'message') {
-    text.textContent = record.text.split('\n')[0] || '（空回复）';
-  } else {
-    text.textContent = record.text.split('\n')[0] || taskTitle(record);
+  if (open) details.open = true;
+  const summaryRow = document.createElement('summary');
+  summaryRow.className = 'process-head';
+  summaryRow.append(chevron());
+  const labelNode = document.createElement('span');
+  labelNode.className = 'process-label';
+  labelNode.textContent = label;
+  summaryRow.append(labelNode);
+  if (summary) {
+    const text = document.createElement('span');
+    text.className = 'process-summary';
+    text.textContent = summary;
+    summaryRow.append(text);
   }
-  const trailing = document.createElement('span');
-  trailing.className = 'trailing';
-  const stamp = document.createElement('span');
-  stamp.className = 'time';
-  stamp.textContent = time(record.time);
-  trailing.append(stamp);
-  summary.append(idx, tag, text, trailing);
-  details.append(summary);
-  const body = document.createElement('div');
-  body.className = 'detail';
-  if (record.kind === 'tool') {
-    if (record.argsText) body.append(detailBlock(record.argsText, record.truncated, true));
-    if (record.result) body.append(detailBlock(record.result.text, record.result.truncated, true));
-    else if (record.orphan) body.append(detailBlock('调用记录不在已读取范围内，仅剩结果。', false, true));
-  } else {
-    const prose = document.createElement('div');
-    prose.className = 'prose';
-    prose.textContent = record.text;
-    body.append(prose);
-    if (record.truncated) {
-      const note = document.createElement('div');
-      note.className = 'truncated-note';
-      note.textContent = '内容较长，仅展示前 8000 字符。';
-      body.append(note);
-    }
+  details.append(summaryRow);
+  if (bodies.length) {
+    const body = document.createElement('div');
+    body.className = 'process-body';
+    for (const node of bodies) body.append(node);
+    details.append(body);
   }
-  details.append(body);
   li.append(details);
   return li;
 }
 
-function renderTurn(turn, startIndex) {
+function codeBlock(text, truncated) {
+  const node = document.createElement('pre');
+  node.textContent = text + (truncated ? '\n…' : '');
+  return node;
+}
+
+function bubble(record) {
+  const li = document.createElement('li');
+  li.className = 'user-row';
+  const node = document.createElement('div');
+  node.className = 'bubble';
+  node.textContent = record.text;
+  li.append(node);
+  return li;
+}
+
+function prose(record) {
+  const li = document.createElement('li');
+  li.className = 'assistant-row';
+  const node = document.createElement('div');
+  node.className = 'prose';
+  node.textContent = record.text;
+  li.append(node);
+  if (record.truncated) {
+    const note = document.createElement('div');
+    note.className = 'truncated-note';
+    note.textContent = '内容较长，仅展示前 8000 字符。';
+    li.append(note);
+  }
+  return li;
+}
+
+function recordNode(record) {
+  const failed = record.state === 'error' || record.state === 'interrupted';
+  if (record.kind === 'task' && record.sourceKind === 'user') return bubble(record);
+  if (record.kind === 'message') return prose(record);
+  if (record.kind === 'task') {
+    return processRow({
+      label: record.sourceKind === 'skill-catalog' ? '技能' : '上下文',
+      summary: record.text.split('\n')[0],
+      bodies: [codeBlock(record.text, record.truncated)],
+    });
+  }
+  const { label, path } = toolTitle(record);
+  const bodies = [];
+  if (record.argsText) bodies.push(codeBlock(record.argsText, record.truncated));
+  if (record.result) bodies.push(codeBlock(record.result.text, record.result.truncated));
+  else if (record.orphan) bodies.push(codeBlock('调用记录不在已读取范围内，仅剩结果。', false));
+  if (record.interruptedAt) bodies.push(codeBlock(`已中断 · ${clock(record.interruptedAt.time)}`, false));
+  return processRow({
+    label: failed ? `${TOOL_LABELS[record.name] ?? record.name}（${record.state === 'interrupted' ? '已中断' : '异常'}）` : TOOL_LABELS[record.name] ?? record.name,
+    summary: path ?? '',
+    open: failed,
+    failed,
+    bodies,
+  });
+}
+
+function statusLine(turn) {
+  const label = turn.end
+    ? `${REASON_LABELS[turn.end.reason] ?? turn.end.reason}，用时 ${duration(turn.records[0]?.time ?? turn.end.time, turn.end.time)}`
+    : '进行中…';
+  const node = document.createElement('summary');
+  node.className = 'status-line';
+  node.append(chevron());
+  const text = document.createElement('span');
+  text.textContent = label;
+  node.append(text);
+  return node;
+}
+
+// Native conversation order: user bubbles, then the collapsible process
+// group (context, skills, tools), then the assistant text.
+function renderTurn(turn) {
   const section = document.createElement('li');
   section.className = 'turn';
-  const head = document.createElement('div');
-  head.className = 'turn-head';
-  const inner = document.createElement('div');
-  inner.className = 'turn-inner';
-  const title = document.createElement('span');
-  title.className = 'turn-title';
-  title.textContent = turn.turn === 0 ? '准备' : `回合 ${turn.turn}`;
-  inner.append(title);
-  if (turn.end) {
-    const badge = document.createElement('span');
-    badge.className = 'turn-reason';
-    badge.textContent = REASON_LABELS[turn.end.reason] ?? turn.end.reason;
-    inner.append(badge);
+  const bubbles = [];
+  const process = [];
+  const messages = [];
+  for (const record of turn.records) {
+    if (record.kind === 'task' && record.sourceKind === 'user') bubbles.push(record);
+    else if (record.kind === 'message') messages.push(record);
+    else process.push(record);
   }
-  head.append(inner);
-  const list = document.createElement('ul');
-  list.className = 'records';
-  let index = startIndex;
-  for (const record of turn.records) list.append(renderRecord(record, ++index));
-  section.append(head, list);
+  const head = document.createElement('div');
+  head.className = 'user-stack';
+  for (const record of bubbles) head.append(bubble(record));
+  if (head.children.length) section.append(head);
+  if (process.length) {
+    const group = document.createElement('details');
+    group.className = 'process-group';
+    group.open = true;
+    group.append(statusLine(turn));
+    const list = document.createElement('ul');
+    list.className = 'process-list';
+    for (const record of process) list.append(recordNode(record));
+    group.append(list);
+    section.append(group);
+  }
+  for (const record of messages) section.append(recordNode(record));
   return section;
 }
 
@@ -137,11 +184,7 @@ export function mountLedger(container, { followButton }) {
     render(events) {
       const ledger = buildLedger(events);
       const fragment = document.createDocumentFragment();
-      let index = 0;
-      for (const turn of ledger.turns) {
-        fragment.append(renderTurn(turn, index));
-        index += turn.records.length;
-      }
+      for (const turn of ledger.turns) fragment.append(renderTurn(turn));
       container.replaceChildren(fragment);
       if (following) {
         lastTailWrite = Date.now();
