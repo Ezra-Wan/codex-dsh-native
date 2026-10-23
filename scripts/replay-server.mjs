@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('../ui/prototype/', import.meta.url));
 const port = Number(process.argv[2] ?? 8791);
-const types = { '.html': 'text/html; charset=utf-8', '.mjs': 'text/javascript', '.json': 'application/json', '.md': 'text/markdown' };
+const types = { '.html': 'text/html; charset=utf-8', '.mjs': 'text/javascript', '.json': 'application/json', '.md': 'text/markdown', '.css': 'text/css; charset=utf-8' };
 
 createServer(async (request, response) => {
   try {

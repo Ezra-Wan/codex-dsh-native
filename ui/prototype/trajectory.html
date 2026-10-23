@@ -4,85 +4,105 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>DSH 执行记录</title>
+<link rel="stylesheet" href="./theme.css">
 <style>
-/* Tokens from @deepseek-ai/dsh-client-ui-theme (0.2.1-rc.2, MIT); chat-form
-   geometry from packages/client/ui-chat MessageItem/TurnProcessNodeView. */
-:root{
-  color-scheme:light;
-  --base:#fff;--platform:#f5f6f7;--bubble:#edf3fe;
-  --hairline:#0000001a;--hover:#2631480f;
-  --label-1:#0f1115;--label-2:#61666b;--label-3:#81858c;
-  --error:#ec1313;--error-2:#f25a5a;--brand:#5686fe;
-  --radius-sm:8px;--radius-xl:20px;
-  --font:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,"PingFang SC","Microsoft YaHei",sans-serif;
-  --mono:ui-monospace,"SF Mono","Cascadia Code",Consolas,monospace;
-}
-@media (prefers-color-scheme:dark){:root:not([data-theme=light]){
-  color-scheme:dark;
-  --base:#151517;--platform:#353638;--bubble:#2c2c2e;
-  --hairline:#ffffff1f;--hover:#ffffff14;
-  --label-1:#f9fafb;--label-2:#cfd3d6;--label-3:#adb2b8;
-  --error:#f25a5a;
-}}
-:root[data-theme=dark]{
-  color-scheme:dark;
-  --base:#151517;--platform:#353638;--bubble:#2c2c2e;
-  --hairline:#ffffff1f;--hover:#ffffff14;
-  --label-1:#f9fafb;--label-2:#cfd3d6;--label-3:#adb2b8;
-  --error:#f25a5a;
-}
+/* Component styles copied from upstream sources at 687f282e (MIT):
+   header/tabs — packages/client/ui-conversation/src/client/skeleton/ConversationRoot.module.css
+   chat view   — packages/client/ui-chat/src/client/chat/MessageItem / TurnProcessNodeView.module.css
+   ledger view — packages/client/ui-trajectory/src/client/TrajectoryCell / TrajectoryTurnHeader.module.css
+   All colors/radii/fonts ride the copied token sheet in theme.css. */
 *{box-sizing:border-box}
-body{margin:0;background:var(--base);color:var(--label-1);font:14px/22px var(--font)}
-header{max-width:760px;margin:0 auto;padding:18px 16px 2px}
-h1{font:600 15px/22px var(--font);margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.toolbar{display:flex;gap:8px;align-items:center;max-width:760px;margin:0 auto;padding:10px 16px 6px}
-button,select{font:13px/20px var(--font);color:var(--label-2);background:none;border:none;border-radius:8px;padding:5px 10px;cursor:pointer}
-button:hover,select:hover{background:var(--hover);color:var(--label-1)}
+body{margin:0;background:var(--dsw-alias-bg-base);color:var(--dsw-alias-label-primary);font:var(--dsw-font-base-16)}
+button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
 button:disabled{cursor:default;opacity:.4}
-button:focus-visible,select:focus-visible{outline:2px solid var(--brand);outline-offset:1px}
+button:focus-visible,select:focus-visible,summary:focus-visible{outline:2px solid var(--dsw-alias-state-business-primary);outline-offset:1px;border-radius:var(--dsw-radius-xs)}
+
+/* Header + view tab strip (ConversationRoot .header/.tabs/.tab). */
+.app-header{display:grid;min-height:76px;padding:10px 28px 0 20px;border-bottom:0.5px solid var(--dsw-alias-border-l3)}
+.title-row{display:flex;align-items:center;min-height:30px}
+.title-row h1{font:var(--dsw-font-base-strong-16);margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tabs{grid-column:1 / -1;position:relative;z-index:1;display:flex;gap:36px;margin-top:10px;padding-left:8px}
+.tab{position:relative;padding:0 0 9px;font-size:13px;line-height:16px;font-weight:500;color:var(--dsw-alias-label-tertiary);cursor:pointer}
+.tab::after{content:'';position:absolute;right:0;bottom:-1px;left:0;height:2px;border-radius:2px;background:transparent}
+.tab:hover{color:var(--dsw-alias-label-secondary)}
+.tab.active{color:var(--dsw-alias-state-business-primary)}
+.tab.active::after{background:var(--dsw-alias-state-business-primary)}
+
+.toolbar{display:flex;gap:8px;align-items:center;max-width:760px;margin:0 auto;padding:8px 16px 4px}
+.toolbar button,.toolbar select{font:var(--dsw-font-xs-13);color:var(--dsw-alias-label-secondary);background:none;border-radius:var(--dsw-radius-sm);padding:4px 10px;cursor:pointer}
+.toolbar button:hover,.toolbar select:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
+
 #stage{padding:0 16px 24px}
-#panel{position:relative;max-width:760px;margin:0 auto}
-#ledger{height:calc(100vh - 110px);min-height:320px;overflow-y:auto;overscroll-behavior:contain;border-radius:12px}
-#ledger ul{list-style:none;margin:0;padding:0}
-.turn{padding-bottom:6px}
-/* User message: right-aligned bubble (MessageItem .bubble). */
-.user-stack{display:flex;flex-direction:column;align-items:flex-end;gap:8px;padding:6px 0}
-.bubble{max-width:min(70%,525px);background:var(--bubble);border-radius:var(--radius-xl);padding:10px 16px;white-space:pre-wrap;word-break:break-word}
-/* Collapsible turn status line (已完成，用时 …). */
-.status-line{display:flex;align-items:center;height:33px;color:var(--label-3);cursor:pointer;list-style:none;transition:color 100ms ease}
-.status-line::-webkit-details-marker{display:none}
-.status-line:hover{color:var(--label-2);background:var(--hover);border-radius:8px}
-.status-line:focus-visible{outline:2px solid var(--brand);outline-offset:2px;border-radius:8px}
+.view[hidden]{display:none}
 .chevron{flex:none;width:14px;height:14px;margin-right:6px;position:relative;transition:transform 100ms ease}
 .chevron::after{content:"";position:absolute;left:4px;top:4px;width:5px;height:5px;border-right:1.4px solid currentColor;border-bottom:1.4px solid currentColor;transform:rotate(45deg)}
 details[open] > .status-line .chevron,details[open] > summary .chevron{transform:rotate(180deg)}
-/* Compact process rows: hairline separated, no card. */
-.process-list{padding-bottom:2px}
-.process-row{border-bottom:0.5px solid var(--hairline)}
+
+/* ---------- 对话 view (MessageItem / TurnProcessNodeView) ---------- */
+#view-chat{max-width:760px;margin:0 auto;font-size:14px}
+.chat-scroll{height:calc(100vh - 186px);min-height:320px;overflow-y:auto;overscroll-behavior:contain}
+.chat-scroll ul{list-style:none;margin:0;padding:0}
+.turn{padding-bottom:6px}
+.user-stack{display:flex;flex-direction:column;align-items:flex-end;gap:8px;padding:6px 0}
+.bubble{max-width:min(calc(760px * 0.702),82%);background:var(--dsw-specific-bubble);border-radius:var(--dsw-radius-xl);padding:10px 16px;font-size:var(--dsh-content-font-size,14px);line-height:calc(22px);color:var(--dsw-alias-label-primary);white-space:pre-wrap;word-break:break-word}
+.status-line{display:flex;align-items:center;height:33px;color:var(--dsw-alias-label-tertiary);cursor:pointer;list-style:none;transition:color 100ms ease}
+.status-line::-webkit-details-marker{display:none}
+.status-line:hover{color:var(--dsw-alias-label-secondary);background:var(--dsw-alias-interactive-bg-hover);border-radius:var(--dsw-radius-sm)}
+.process-row{border-bottom:0.5px solid var(--dsw-alias-border-l2)}
 .process-row:last-child{border-bottom:none}
-.process-head{display:flex;align-items:center;min-height:25px;padding:0 4px;gap:2px;color:var(--label-3);cursor:pointer;list-style:none;transition:color 100ms ease}
+.process-head{display:flex;align-items:center;min-height:25px;padding:0 4px;gap:2px;color:var(--dsw-alias-label-tertiary);cursor:pointer;list-style:none;transition:color 100ms ease}
 .process-head::-webkit-details-marker{display:none}
-.process-head:hover{color:var(--label-2);background:var(--hover);border-radius:8px}
-.process-head:focus-visible{outline:2px solid var(--brand);outline-offset:1px;border-radius:8px}
+.process-head:hover{color:var(--dsw-alias-label-secondary);background:var(--dsw-alias-interactive-bg-hover);border-radius:var(--dsw-radius-sm)}
 .process-label{flex:none}
 .process-summary{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-left:6px}
-.process-summary::before{content:"·";margin-right:6px;color:var(--label-3)}
+.process-summary::before{content:"·";margin-right:6px}
 .process-body{padding:2px 4px 10px 22px}
-.process-body pre{margin:4px 0 0;padding:8px 10px;border-radius:var(--radius-sm);background:var(--platform);font:12px/18px var(--mono);white-space:pre-wrap;overflow-wrap:anywhere;max-height:280px;overflow:auto;color:var(--label-1)}
-/* Assistant text flows free. */
+.process-body pre,.detail pre{margin:4px 0 0;padding:8px 10px;border-radius:var(--dsw-radius-sm);background:var(--dsw-alias-bg-layer-2);font-family:var(--ds-font-family-code,ui-monospace,Consolas,monospace);font-size:12px;line-height:18px;white-space:pre-wrap;overflow-wrap:anywhere;max-height:280px;overflow:auto;color:var(--dsw-alias-label-primary)}
 .assistant-row{padding:8px 4px 4px}
 .prose{white-space:pre-wrap;word-break:break-word}
-.truncated-note{margin-top:4px;font:12px/18px var(--font);color:var(--label-3)}
-.process-row.failed .process-label,.process-row.failed .process-summary{color:var(--error)}
-#follow{position:absolute;right:16px;bottom:16px;z-index:2;border-radius:18px;padding:6px 14px;color:var(--label-1);background:var(--platform);box-shadow:0 4px 16px #0003}
-#follow:hover{color:var(--label-1)}
-#empty{padding:32px 20px;color:var(--label-3)}
+.truncated-note{margin-top:4px;font:var(--dsw-font-xs-13);color:var(--dsw-alias-label-tertiary)}
+.process-row.failed .process-label,.process-row.failed .process-summary{color:var(--dsw-alias-state-error-primary)}
+#chat-follow,#ledger-follow{position:absolute;right:16px;bottom:16px;z-index:2;border-radius:18px;padding:6px 14px;color:var(--dsw-alias-label-primary);background:var(--dsw-alias-bg-layer-3);border:0.5px solid var(--dsw-alias-border-l3);box-shadow:0 4px 16px #0003}
+#empty{padding:32px 20px;color:var(--dsw-alias-label-tertiary)}
 .hidden{display:none!important}
-@media (max-width:480px){#stage{padding:0 8px 20px}.bubble{max-width:88%}}
+
+/* ---------- 轨迹 view (TrajectoryCell / TrajectoryTurnHeader) ---------- */
+#view-trajectory{position:relative;max-width:980px;margin:0 auto}
+.ledger-scroll{height:calc(100vh - 186px);min-height:320px;overflow-y:auto;overscroll-behavior:contain;border:0.5px solid var(--dsw-alias-border-l4);border-radius:var(--dsw-radius-md);background:var(--dsw-alias-bg-layer-2)}
+.ledger-scroll ul{list-style:none;margin:0;padding:0}
+.turn-head{position:sticky;top:0;z-index:1;height:44px;background:var(--dsw-alias-button-ghost-active-fill)}
+.turn-inner{display:flex;align-items:center;justify-content:space-between;height:100%;max-width:848px;margin:0 auto;padding:0 16px}
+.turn-name{font:var(--dsw-font-xs-strong-13);color:var(--dsw-alias-label-primary)}
+.turn-badge{font:var(--dsw-font-xs-13);color:var(--dsw-alias-label-secondary);border:0.5px solid var(--dsw-alias-border-l4);border-radius:var(--dsw-radius-xs);padding:1px 6px}
+.records{padding:8px 16px 12px}
+.record details{border-radius:var(--dsw-radius-md);border:0.5px solid var(--dsw-alias-border-l4);background:var(--dsw-alias-bg-layer-3);margin-bottom:6px}
+.record[data-state=error] details,.record[data-state=interrupted] details{border-color:color-mix(in srgb,var(--dsw-alias-state-error-secondary) 35%,transparent)}
+.record summary{list-style:none;display:flex;align-items:center;height:38px;padding:0 8px 0 12px;gap:12px;cursor:pointer;min-width:0}
+.record summary::-webkit-details-marker{display:none}
+.idx{flex:none;width:24px;font:var(--dsw-font-xs-13);color:var(--dsw-alias-label-tertiary)}
+.tag{flex:none;display:inline-flex;align-items:center;height:22px;padding:0 4px;border-radius:var(--dsw-radius-xs);font:var(--dsw-font-xs-strong-13);white-space:nowrap}
+.tagUser{color:var(--dsw-alias-state-success-primary);background:var(--dsw-alias-state-success-tertiary)}
+.tagContext{color:color-mix(in srgb,var(--dsw-alias-state-success-primary) 68%,var(--dsw-alias-label-secondary));background:var(--dsw-alias-state-success-tertiary)}
+.tagMessage{color:color-mix(in srgb,var(--dsw-static-deepseek-450) 60%,var(--dsw-alias-state-error-secondary));background:color-mix(in srgb,color-mix(in srgb,var(--dsw-static-deepseek-450) 55%,var(--dsw-alias-state-error-secondary)) 15%,var(--dsw-alias-bg-layer-1))}
+.tagTool{color:var(--dsw-alias-state-warn-label);background:var(--dsw-alias-state-warn-tertiary)}
+.tagError{color:var(--dsw-alias-state-error-primary);background:color-mix(in srgb,var(--dsw-alias-state-error-secondary) 15%,var(--dsw-alias-bg-layer-1))}
+.cell-text{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:var(--dsw-font-xs-13);color:var(--dsw-alias-label-primary)}
+.trailing{flex:none;margin-left:auto;display:flex;align-items:center}
+.time{width:64px;font:var(--dsw-font-xs-13);color:var(--dsw-alias-label-tertiary);white-space:nowrap}
+.detail{padding:2px 12px 10px 56px}
+.detail pre{margin:6px 0 0;padding:8px 10px;border-radius:var(--dsw-radius-sm);background:var(--dsw-alias-bg-layer-2);font-family:var(--ds-font-family-code,ui-monospace,Consolas,monospace);font-size:12px;line-height:18px;white-space:pre-wrap;overflow-wrap:anywhere;max-height:280px;overflow:auto;color:var(--dsw-alias-label-primary)}
+.record[data-state=error] .detail pre,.record[data-state=interrupted] .detail pre{background:color-mix(in srgb,var(--dsw-alias-state-error-secondary) 8%,var(--dsw-alias-bg-layer-3))}
+@media (max-width:480px){#stage{padding:0 8px 20px}.records{padding:6px 8px 10px}.record summary{gap:8px;padding-left:8px}.idx{display:none}.detail{padding-left:12px}.bubble{max-width:88%}}
 </style>
 </head>
 <body>
-<header><h1 id="title">DSH 执行记录</h1></header>
+<header class="app-header">
+  <div class="title-row"><h1 id="title">DSH 执行记录</h1></div>
+  <nav class="tabs">
+    <button class="tab active" id="tab-chat" type="button">对话</button>
+    <button class="tab" id="tab-trajectory" type="button">轨迹</button>
+  </nav>
+</header>
 <nav class="toolbar">
   <select id="fixture" aria-label="选择执行记录">
     <option value="demo-1792663550562.json">演示任务（含命令失败与恢复）</option>
@@ -91,25 +111,34 @@ details[open] > .status-line .chevron,details[open] > summary .chevron{transform
   </select>
   <button id="replay" type="button">逐步回放</button>
 </nav>
-<div id="stage"><div id="panel">
-  <div id="ledger" aria-label="执行记录">
-    <p id="empty">正在载入记录…</p>
+<div id="stage">
+  <div class="view" id="view-chat">
+    <div class="chat-scroll" id="chat-ledger" aria-label="对话记录">
+      <p id="empty">正在载入记录…</p>
+    </div>
+    <button id="chat-follow" class="hidden" type="button">回到最新</button>
   </div>
-  <button id="follow" class="hidden" type="button">回到最新</button>
-</div></div>
+  <div class="view" id="view-trajectory" hidden>
+    <div class="ledger-scroll" id="trajectory-ledger" aria-label="执行轨迹"></div>
+    <button id="ledger-follow" class="hidden" type="button">回到最新</button>
+  </div>
+</div>
 <script type="module">
 import { mountLedger } from './trajectory.mjs';
+import { mountLedger as mountLedgerGrid } from './ledger-view.mjs';
 const forced = new URLSearchParams(location.search).get('theme');
 if (forced === 'light' || forced === 'dark') document.documentElement.dataset.theme = forced;
 const $ = id => document.getElementById(id);
 let all = [];
-const ledger = mountLedger($('ledger'), { followButton: $('follow') });
+const chat = mountLedger($('chat-ledger'), { followButton: $('chat-follow') });
+const grid = mountLedgerGrid($('trajectory-ledger'), { followButton: $('ledger-follow') });
 async function load(name) {
   const fixture = await (await fetch(`./fixture/${name}`)).json();
   all = fixture.events;
   $('title').textContent = fixture.label;
   $('empty')?.remove();
-  ledger.render(all);
+  chat.render(all);
+  grid.render(all);
 }
 let replaying = false;
 $('replay').addEventListener('click', async () => {
@@ -117,13 +146,23 @@ $('replay').addEventListener('click', async () => {
   replaying = true;
   $('replay').disabled = true;
   for (let shown = 1; shown <= all.length; shown++) {
-    ledger.render(all.slice(0, shown));
+    chat.render(all.slice(0, shown));
+    grid.render(all.slice(0, shown));
     await new Promise(resolve => setTimeout(resolve, 220));
   }
   replaying = false;
   $('replay').disabled = false;
 });
 $('fixture').addEventListener('change', () => load($('fixture').value));
+const tabs = [['tab-chat', 'view-chat'], ['tab-trajectory', 'view-trajectory']];
+for (const [tabId, viewId] of tabs) {
+  $(tabId).addEventListener('click', () => {
+    for (const [t, v] of tabs) {
+      $(t).classList.toggle('active', t === tabId);
+      $(v).hidden = v !== viewId;
+    }
+  });
+}
 await load($('fixture').value);
 </script>
 </body>
