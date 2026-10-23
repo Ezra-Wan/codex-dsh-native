@@ -1,4 +1,26 @@
 import { DeepSeekHarness } from '@deepseek-ai/dsh-sdk-client';
+import { mkdir, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+
+// Official minimal delegation setup from @deepseek-ai/dsh-subagent README:
+// service + in-process provider + model-facing tool. The sdk profile ships
+// without any of these, so subagent tasks opt in via an extra profile patch.
+const SUBAGENT_PATCH = [
+  "- name: '@deepseek-ai/dsh-subagent'",
+  "- name: '@deepseek-ai/dsh-subagent-spawn-in-process'",
+  "- name: '@deepseek-ai/dsh-tool-subagent'",
+  '  config:',
+  '    provider: spawn',
+  '    toolName: subagent',
+].join('\n') + '\n';
+
+export async function writeSubagentPatch(root) {
+  const dir = join(root, 'patches');
+  await mkdir(dir, { recursive: true });
+  const path = join(dir, 'subagent.yaml');
+  await writeFile(path, SUBAGENT_PATCH, 'utf8');
+  return path;
+}
 
 class NativeRuntime extends DeepSeekHarness {
   async run(task, { sessionId, onNotification }) {

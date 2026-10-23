@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, rm, mkdir } from 'node:fs/promises';
+import { mkdtemp, rm, mkdir, readFile, writeFile, utimes } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Bridge } from '../src/bridge.mjs';
@@ -10,9 +10,9 @@ function factory() {
   const instances = [];
   return {
     histories, instances,
-    create(record) {
+    create(record, options = {}) {
       const runtime = {
-        closed: false, resumed: false,
+        closed: false, resumed: false, patches: options.patches ?? [], record,
         start: async () => {},
         session: id => ({ getWorkingDirectory: async () => { histories.set(id, []); return record.cwd; } }),
         resumeSession: async id => {
@@ -21,7 +21,7 @@ function factory() {
         },
         run: (task, { sessionId, onNotification }) => new Promise((resolve, reject) => {
           runtime.reject = reject;
-          runtime.emit = event => onNotification?.({ method: 'session.event', params: { sessionId, event } });
+          runtime.emit = (event, sessionIdOverride) => onNotification?.({ method: 'session.event', params: { sessionId: sessionIdOverride ?? sessionId, event } });
           runtime.finish = (reason = 'completed', final = task) => {
             histories.get(sessionId).push(task);
             resolve({ finalResponse: final, events: [
@@ -194,4 +194,81 @@ test('a recovered tool failure stays visible after final completion and reload',
   assert.match(result.warnings[0].message, /access denied/);
   await bridge.release(first.agent_id);
   assert.equal((await bridge.status(first.agent_id)).warnings.length, 1);
+});
+
+test('subagent tasks mount the official delegation patch and record role', async t => {
+  const { root, bridge, fake } = await setup(t);
+  await bridge.setEnabled(true);
+  const task = await bridge.start({ cwd: root, task: 'delegate docs', subagents: true, role: 'sub', name: '[X·sub] docs' });
+  const runtime = await ready(fake);
+  assert.equal(runtime.patches.length, 1);
+  const patch = await readFile(runtime.patches[0], 'utf8');
+  assert.match(patch, /dsh-subagent-spawn-in-process/);
+  assert.match(patch, /provider: spawn/);
+  runtime.finish();
+  const summary = await bridge.wait(task.agent_id);
+  assert.equal(summary.role, 'sub');
+  assert.equal(summary.subagents, true);
+});
+
+test('plain tasks stay on the unpatched profile', async t => {
+  const { root, bridge, fake } = await setup(t);
+  await bridge.setEnabled(true);
+  await bridge.start({ cwd: root, task: 'plain', permission: 'read-only' });
+  const runtime = await ready(fake);
+  assert.deepEqual(runtime.patches, []);
+  runtime.finish();
+});
+
+test('descendant session events land in children, not as bridge agents', async t => {
+  const { root, bridge, fake } = await setup(t);
+  await bridge.setEnabled(true);
+  const task = await bridge.start({ cwd: root, task: 'spawn children', permission: 'read-only' });
+  const runtime = await ready(fake);
+  const childId = '11111111-2222-3333-4444-555555555555';
+  runtime.emit({ type: 'turn/start', seq: 1, time: 1, data: { turn: 1 } }, childId);
+  runtime.emit({ type: 'tool/call', seq: 2, time: 2, data: { callId: 'c1', name: 'read', arguments: '{}' } }, childId);
+  const mid = await bridge.status(task.agent_id);
+  assert.equal(mid.children.length, 1);
+  assert.equal(mid.children[0].child_id, childId);
+  assert.equal(mid.children[0].lastEvent, 'tool/call');
+  runtime.finish();
+  const done = await bridge.wait(task.agent_id);
+  assert.equal(done.children[0].child_id, childId);
+  // The child id is not itself an agent: following it up must fail.
+  await assert.rejects(bridge.followup(childId, 'drive'), /ENOENT|Invalid agent_id/);
+});
+
+test('extra user prompts mark a user takeover for the next parent read', async t => {
+  const { root, bridge, fake } = await setup(t);
+  await bridge.setEnabled(true);
+  const task = await bridge.start({ cwd: root, task: 'original', permission: 'read-only' });
+  const runtime = await ready(fake);
+  // The real SDK echoes the bridge prompt back as a kind=user user/message;
+  // a second one is the user steering this peer from the native UI.
+  runtime.emit({ type: 'user/message', seq: 4, time: 4, data: { message: { content: [{ type: 'text', text: 'original' }], source: { kind: 'user' } } } });
+  runtime.emit({ type: 'user/message', seq: 5, time: 5, data: { message: { content: [{ type: 'text', text: 'user steering' }], source: { kind: 'user' } } } });
+  runtime.finish();
+  const result = await bridge.wait(task.agent_id);
+  assert.equal(result.userTakeover.events, 1);
+  assert.match(result.userTakeover.hint, /outside the bridge/);
+});
+
+test('followup refuses while the session log shows fresh external writes', async t => {
+  const { root, bridge, fake } = await setup(t);
+  await bridge.setEnabled(true);
+  const task = await bridge.start({ cwd: root, task: 'first' });
+  (await ready(fake)).finish();
+  await bridge.wait(task.agent_id);
+  const sessionDir = join(bridge.home, 'sessions', `--w-${task.session_id}--`);
+  await mkdir(sessionDir, { recursive: true });
+  const logPath = join(sessionDir, 'session.jsonl');
+  await writeFile(logPath, '{}\n');
+  const fresh = new Date(Date.now() - 5_000);
+  await utimes(logPath, fresh, fresh);
+  await assert.rejects(bridge.followup(task.agent_id, 'next'), /user side may be driving/);
+  const stale = new Date(Date.now() - 300_000);
+  await utimes(logPath, stale, stale);
+  const next = await bridge.followup(task.agent_id, 'next');
+  assert.ok(['starting', 'running'].includes(next.status), `unexpected status ${next.status}`);
 });
