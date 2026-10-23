@@ -66,7 +66,7 @@
 
 ### 2. 复用原生视觉与交互：先做最小组件验证
 
-- [x] 获取对应版本完整源码，先看 `ui-trajectory` / `ui-chat` 的 exports、依赖及 provider 契约，优先直接复用组件，保留升级路径。（2026-10-23：以 node_modules 内 0.2.1-rc.2 发布物为来源——exports 声明 `./src/*` 但 src 未随包发布；浏览器入口 `lib/client.js` 是 `window.__ModuleLoader__` 注册块，react 非独立 npm 包。结论：`docs/upstream-ui-reuse.md`）
+- [x] 获取对应版本完整源码，先看 `ui-trajectory` / `ui-chat` 的 exports、依赖及 provider 契约，优先直接复用组件，保留升级路径。（2026-10-23：以 node_modules 内 0.2.1-rc.2 发布物为来源——exports 声明 `./src/*` 但 src 未随包发布；浏览器入口 `lib/client.js` 是 `window.__ModuleLoader__` 注册块，react 非独立 npm 包。结论：`docs/upstream-ui-reuse.md`。同日已稀疏检出上游源码到 `.local/reference/dsh-upstream`（pinned `687f282e`）并精读 trajectory/session-controller 实现，见 `docs/upstream-source-study.md`）
 - [x] 用已有真实记录做离线适配原型，先显示一段“读 → 写 → 校验失败 → 恢复”的轨迹，验证窄面板、暗色、折叠、错误、长结果和自动滚动。（2026-10-23：`ui/prototype/`，`npm run prototype` 后访问 127.0.0.1:8791；真实 fixture 由生产 `readNativeEvents` 提取（demo 会话含 pwsh 失败+读回恢复，ui-check 会话读→写→校验通过），另有标注合成的长结果压力样本。截图证据 `.local/prototype-evidence-20261023/`，验收记录 `review/acceptance.json`，测试 18/18）
 - [ ] 对照原生界面截图/实际操作后再称为视觉一致。不能只换 CSS 或做打字动画就声称原生能力一致。（原型已就绪，尚无原生界面对照截图）
 - [x] 若组件必须依赖完整客户端，简短比较三条路：官方组件+薄适配；原生 Web 整体嵌入；按许可移植最小展示组件。记录依赖、维护与会话归属成本，再选最小可行方案。（2026-10-23：P0 选 C 并记录 A/B 的推迟理由，见 `docs/upstream-ui-reuse.md`）
@@ -75,7 +75,7 @@
 
 ### 3. 将显示链路改为真实事件流
 
-- [ ] 先核对所固定 SDK 的通知契约：assistant stream 是否暴露、属于何种通知、能否恢复；从官方类型/实现验证，不能根据名称猜接口。（提示：`node_modules/@deepseek-ai/dsh-api-session-controller` 与 `dsh-sdk-client` 的类型可直接读；npm 已出现 `0.2.1-rc.3`，仍锁 rc.2，升级需成对核实）
+- [x] 先核对所固定 SDK 的通知契约：assistant stream 是否暴露、属于何种通知、能否恢复；从官方类型/实现验证，不能根据名称猜接口。（2026-10-23 源码验证：SDK stdio 协议通知只有 `session.event`/`session.status`，流帧只在运行时进程内的 `agent/assistant-stream` cordis 事件与 session-controller 的 `follow` 推送流（含 cursorless assistant-stream 帧 + 重连 baseline + settlement 语义）中存在。结论与依据见 `docs/upstream-source-study.md`——要做真推送只能引入连接栈（路线 A 工程量），否则持久化事件有界拉取是唯一降级。npm 已出现 `0.2.1-rc.3`，仍锁 rc.2，升级需成对核实）
 - [ ] 后端保留原生事件身份、session/turn/seq 与必要 attempt/revision；显示端消费可见文字与工具生命周期。过滤推理内容、请求头和凭据；不要原样转发 provider 原始数据。
 - [ ] 在当前 MCP Apps 宿主实际支持的范围里选择推送方式。若宿主只支持拉取，评估事件到达即返回的有界长轮询作为降级，并明确仍非推送；不要只把 2 秒改成 100 ms。
 - [ ] 持久日志用于断线补读；处理丢帧、重复、重连、结束与最后一批结果的竞态、多个卡片订阅释放和背压。
