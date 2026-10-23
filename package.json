@@ -1,0 +1,39 @@
+{
+  "name": "codex-dsh-native-p0",
+  "version": "0.1.1",
+  "private": true,
+  "type": "module",
+  "description": "Optional asynchronous MCP bridge to persistent native DeepSeek Harness sessions",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "build": "node scripts/build-ui.mjs",
+    "prestart": "npm run build",
+    "start": "node src/server.mjs",
+    "pretest": "npm run build",
+    "test": "node --test test/*.test.mjs",
+    "smoke": "node scripts/smoke.mjs",
+    "doctor": "node scripts/doctor.mjs",
+    "check-updates": "node scripts/check-updates.mjs"
+  },
+  "dependencies": {
+    "@deepseek-ai/cordis": "4.0.5",
+    "@deepseek-ai/dsh": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-sdk-client": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-session-persistence-jsonl": "0.2.1-rc.2",
+    "@modelcontextprotocol/ext-apps": "2.0.3",
+    "@modelcontextprotocol/sdk": "1.32.1",
+    "zod": "4.3.6"
+  },
+  "allowScripts": {
+    "@deepseek-ai/dsh-subprocess-local@0.2.1-rc.2": true,
+    "koffi@3.1.1": true,
+    "node-pty@1.2.0-beta.15": true,
+    "protobufjs@7.6.6": true,
+    "esbuild@0.28.2": true
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2"
+  }
+}

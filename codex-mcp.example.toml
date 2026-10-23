@@ -1,0 +1,9 @@
+# Optional bridge. Keep the underlying runtime off until ds_bridge(enabled=true).
+# env_vars forwards a variable; it does not store its secret value here.
+[mcp_servers.dsh_native_p0]
+command = 'D:\nodejs\node.exe'
+args = ['D:\@harness\codex-dsh-native-p0\src\server.mjs']
+env_vars = ['DEEPSEEK_API_KEY']
+startup_timeout_sec = 20
+tool_timeout_sec = 65
+enabled = true
