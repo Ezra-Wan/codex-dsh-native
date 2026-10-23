@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DSH 轨迹原型 · 真实记录回放</title>
+<style>
+:root{
+  color-scheme:light dark;
+  --bg:var(--color-background-primary,#fff);--ink:var(--color-text-primary,#202124);
+  --muted:var(--color-text-secondary,#737373);--line:var(--color-border-primary,#dededb);
+  --soft:var(--color-background-secondary,#f5f5f2);--warn:#a34d0b;--warn-bg:#fff2db;
+  --accent:#497eaa;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.55 var(--font-sans,system-ui,sans-serif)}
+html[data-theme=dark]{color-scheme:dark;
+  --bg:var(--color-background-primary,#202124);--ink:var(--color-text-primary,#eee);
+  --muted:var(--color-text-secondary,#aaa);--line:var(--color-border-primary,#484848);
+  --soft:var(--color-background-secondary,#2b2c2d);--warn:#f2bd73;--warn-bg:#342a1c}
+header{display:flex;gap:12px;align-items:baseline;justify-content:space-between;padding:14px 16px 0}
+.eyebrow{font-size:11px;letter-spacing:.08em;color:var(--muted)}
+h1{font-size:16px;margin:4px 0 0;font-weight:650}
+#stats{font-size:12px;color:var(--muted);padding:0 16px}
+.toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:10px 16px;border-bottom:1px solid var(--line)}
+button,select{font:inherit;color:inherit;background:var(--bg);border:1px solid var(--line);border-radius:5px;padding:4px 9px;cursor:pointer}
+button:hover,select:hover{background:var(--soft)}
+button:disabled{cursor:default;opacity:.45}
+button:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+label{font-size:12px;display:flex;gap:4px;align-items:center;color:var(--muted)}
+#stage{display:flex;justify-content:center;padding:12px 16px 24px}
+#panel{width:100%;max-width:980px;position:relative}
+#panel.w380{width:380px;max-width:100%}
+#panel.w720{width:720px;max-width:100%}
+#ledger{position:relative;height:62vh;overflow-y:auto;border:1px solid var(--line);border-radius:8px;padding:6px 0}
+#ledger ul{list-style:none;margin:0;padding:0 12px}
+.turn{padding:4px 0}
+.turn-head{display:flex;gap:8px;align-items:center;padding:6px 0 2px;font-size:12px;color:var(--muted)}
+.turn-name{font-weight:650;letter-spacing:.04em}
+.turn-badge{border:1px solid var(--line);border-radius:4px;padding:1px 6px}
+.turn-badge.bad{color:var(--warn);border-color:var(--warn)}
+.records .record{border-bottom:1px solid var(--line);padding:8px 0}
+.record:last-child{border-bottom:0}
+.record summary{cursor:pointer;display:flex;gap:10px;align-items:baseline;list-style:none}
+.record summary::-webkit-details-marker{display:none}
+.record .time{font:11px/1.4 ui-monospace,monospace;color:var(--muted);flex-shrink:0}
+.record .label{font-weight:550;overflow-wrap:anywhere}
+.record .chip{margin-left:auto;flex-shrink:0;font-size:11px;color:var(--muted);border:1px solid var(--line);border-radius:4px;padding:0 6px}
+.record.failed{border-left:3px solid var(--warn);padding-left:8px}
+.record.failed .label,.record.failed .chip{color:var(--warn)}
+.record.waiting{border-left:3px dashed var(--line);padding-left:8px}
+.record.waiting .chip{color:var(--accent);border-color:var(--accent)}
+pre{background:var(--soft);padding:9px;border-radius:4px;margin:8px 0 2px;white-space:pre-wrap;overflow-wrap:anywhere;font:12px/1.55 ui-monospace,monospace;max-height:300px;overflow:auto}
+.prose{white-space:pre-wrap;margin-top:6px;overflow-wrap:anywhere}
+.truncated-note{font-size:12px;color:var(--muted);margin-top:4px}
+#follow{position:absolute;right:22px;bottom:34px;z-index:2;box-shadow:0 2px 8px rgba(0,0,0,.25)}
+.hidden{display:none!important}
+footer{padding:0 16px 16px;font-size:11px;color:var(--muted)}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <div class="eyebrow">DEEPSEEK HARNESS · 轨迹原型</div>
+    <h1 id="title">真实记录回放</h1>
+  </div>
+  <span class="eyebrow">最小展示组件 · 非原生界面</span>
+</header>
+<p id="stats">加载中…</p>
+<nav class="toolbar">
+  <select id="fixture" aria-label="选择回放记录">
+    <option value="demo-1792663550562.json">演示任务（含命令失败与恢复）</option>
+    <option value="ui-check-1792664983899.json">界面小测试（读→写→校验）</option>
+    <option value="stress-long.json">压力样本（长结果截断，合成）</option>
+  </select>
+  <button id="replay" type="button">逐步回放</button>
+  <span class="eyebrow">宽度</span>
+  <button id="w380" type="button">380</button>
+  <button id="w720" type="button">720</button>
+  <button id="wfull" type="button">自适应</button>
+  <span class="eyebrow">主题</span>
+  <button id="tauto" type="button">自动</button>
+  <button id="tlight" type="button">亮</button>
+  <button id="tdark" type="button">暗</button>
+</nav>
+<div id="stage"><div id="panel">
+  <div id="ledger" aria-label="执行轨迹账本">
+    <p id="empty" style="padding:24px 12px;color:var(--muted)">选择记录后回放。</p>
+  </div>
+  <button id="follow" class="hidden" type="button">回到最新</button>
+</div></div>
+<footer>事件来自 DSH 原生持久化日志（ds_events 同源）；本页离线回放，不调用模型。展示概念来源见 NOTICE.md。</footer>
+<script type="module">
+import { mountLedger } from './trajectory.mjs';
+const $ = id => document.getElementById(id);
+let all = [];
+const ledger = mountLedger($('ledger'), { followButton: $('follow') });
+async function load(name) {
+  const fixture = await (await fetch(`./fixture/${name}`)).json();
+  all = fixture.events;
+  $('title').textContent = fixture.label;
+  $('empty')?.remove();
+  const result = ledger.render(all);
+  $('stats').textContent = `事件 ${result.stats.events} · 回合 ${result.stats.turns} · 工具 ${result.stats.tools} · 异常 ${result.stats.errors} · 会话 ${fixture.session_id.slice(0, 8)}…`;
+}
+let replaying = false;
+$('replay').addEventListener('click', async () => {
+  if (replaying) return;
+  replaying = true;
+  $('replay').disabled = true;
+  for (let shown = 1; shown <= all.length; shown++) {
+    ledger.render(all.slice(0, shown));
+    await new Promise(resolve => setTimeout(resolve, 220));
+  }
+  replaying = false;
+  $('replay').disabled = false;
+});
+$('fixture').addEventListener('change', () => load($('fixture').value));
+const theme = value => { if (value === 'auto') delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = value; };
+$('w380').addEventListener('click', () => { $('panel').className = 'w380'; });
+$('w720').addEventListener('click', () => { $('panel').className = 'w720'; });
+$('wfull').addEventListener('click', () => { $('panel').className = ''; });
+$('tauto').addEventListener('click', () => theme('auto'));
+$('tlight').addEventListener('click', () => theme('light'));
+$('tdark').addEventListener('click', () => theme('dark'));
+await load($('fixture').value);
+</script>
+</body>
+</html>
