@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>DSH 执行记录</title>
 <link rel="stylesheet" href="./theme.css">
+<link rel="stylesheet" href="./markdown.css">
 <style>
 /* Component styles copied from upstream sources at 687f282e (MIT):
    header/tabs — packages/client/ui-conversation/src/client/skeleton/ConversationRoot.module.css
@@ -45,23 +46,42 @@ details[open] > .status-line .chevron,details[open] > summary .chevron{transform
 .turn{padding-bottom:6px}
 .user-stack{display:flex;flex-direction:column;align-items:flex-end;gap:8px;padding:6px 0}
 .bubble{max-width:min(calc(760px * 0.702),82%);background:var(--dsw-specific-bubble);border-radius:var(--dsw-radius-xl);padding:10px 16px;font-size:var(--dsh-content-font-size,14px);line-height:calc(22px);color:var(--dsw-alias-label-primary);white-space:pre-wrap;word-break:break-word}
-.status-line{display:flex;align-items:center;height:33px;color:var(--dsw-alias-label-tertiary);cursor:pointer;list-style:none;transition:color 100ms ease}
-.status-line::-webkit-details-marker{display:none}
-.status-line:hover{color:var(--dsw-alias-label-secondary);background:var(--dsw-alias-interactive-bg-hover);border-radius:var(--dsw-radius-sm)}
-.process-row{border-bottom:0.5px solid var(--dsw-alias-border-l2)}
-.process-row:last-child{border-bottom:none}
-.process-head{display:flex;align-items:center;min-height:25px;padding:0 4px;gap:2px;color:var(--dsw-alias-label-tertiary);cursor:pointer;list-style:none;transition:color 100ms ease}
-.process-head::-webkit-details-marker{display:none}
-.process-head:hover{color:var(--dsw-alias-label-secondary);background:var(--dsw-alias-interactive-bg-hover);border-radius:var(--dsw-radius-sm)}
-.process-label{flex:none}
-.process-summary{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-left:6px}
-.process-summary::before{content:"·";margin-right:6px}
-.process-body{padding:2px 4px 10px 22px}
+.status-line{display:flex;align-items:center;height:33px;padding:0 0 8px;border-bottom:0.5px solid var(--dsw-alias-border-l2);color:var(--dsw-alias-label-tertiary);cursor:pointer;list-style:none;transition:color 100ms ease}
+.status-line svg{transition:transform 100ms ease;margin-left:6px}
+.turn-rest[open] > .status-line svg{transform:rotate(180deg)}
+.status-line:hover{color:var(--dsw-alias-label-secondary)}
+/* ChatGroupSeat group header: activity icon swaps to chevron on hover/expand. */
+.group-title{display:flex;align-items:center;gap:6px;max-width:100%;padding:0;color:var(--dsw-alias-label-tertiary);font:inherit;font-size:14px;text-align:left;cursor:pointer;list-style:none;transition:color 100ms ease}
+.group-title::-webkit-details-marker{display:none}
+.group-title:hover{color:var(--dsw-alias-label-secondary)}
+.leading{position:relative;flex:none;display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;color:inherit}
+.activity-icon,.swap-chevron{position:absolute;inset:0;display:inline-flex;align-items:center;justify-content:center;transition:opacity 100ms ease}
+.swap-chevron{opacity:0}
+.group-title:is(:hover,:focus-visible) .activity-icon,.group-title[aria-expanded="true"] .activity-icon,.turn-rest:not([open]) > .status-line .swap-chevron{opacity:0}
+.group-title:is(:hover,:focus-visible) .swap-chevron,.group-title[aria-expanded="true"] .swap-chevron{opacity:1}
+.group-body{max-height:min(400px,50vh);overflow-y:auto;padding-top:2px}
+.process-list{--flow-gap:6px}
+/* Member rows: icon + label + summary, no hairlines, no per-row chevron. */
+.process-row{list-style:none}
+.row-head{display:flex;align-items:center;min-height:26px;padding:0 4px;gap:8px;color:var(--dsw-alias-label-tertiary);cursor:pointer;list-style:none;transition:color 100ms ease}
+.row-head::-webkit-details-marker{display:none}
+.row-head:hover{color:var(--dsw-alias-label-secondary);background:var(--dsw-alias-interactive-bg-hover);border-radius:var(--dsw-radius-sm)}
+.row-head:focus-visible{outline:2px solid var(--dsw-alias-state-business-primary);outline-offset:1px;border-radius:var(--dsw-radius-sm)}
+.row-icon{flex:none;display:inline-flex;width:14px;height:14px;color:inherit}
+.row-label{flex:none}
+.row-summary{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-left:6px}
+.row-summary.dotted{text-decoration:underline dotted 1px;text-underline-offset:3px}
+.process-body{padding:2px 4px 8px 26px}
 .process-body pre,.detail pre{margin:4px 0 0;padding:8px 10px;border-radius:var(--dsw-radius-sm);background:var(--dsw-alias-bg-layer-2);font-family:var(--ds-font-family-code,ui-monospace,Consolas,monospace);font-size:12px;line-height:18px;white-space:pre-wrap;overflow-wrap:anywhere;max-height:280px;overflow:auto;color:var(--dsw-alias-label-primary)}
-.assistant-row{padding:8px 4px 4px}
+.assistant-row{padding:10px 4px 4px}
 .prose{white-space:pre-wrap;word-break:break-word}
+.md-h{font-weight:600;margin:6px 0 2px}
+.md-list{margin:2px 0;padding-left:22px}
+.md-list li{margin:2px 0}
+.md-code{background:var(--dsw-alias-bg-layer-2);border-radius:4px;padding:1px 5px;font-family:var(--ds-font-family-code,ui-monospace,Consolas,monospace);font-size:0.92em}
+.md-link{color:var(--dsw-alias-label-primary);text-decoration:underline;text-underline-offset:2px}
 .truncated-note{margin-top:4px;font:var(--dsw-font-xs-13);color:var(--dsw-alias-label-tertiary)}
-.process-row.failed .process-label,.process-row.failed .process-summary{color:var(--dsw-alias-state-error-primary)}
+.process-row.failed .row-label,.process-row.failed .row-summary{color:var(--dsw-alias-state-error-primary)}
 #chat-follow,#ledger-follow{position:absolute;right:16px;bottom:16px;z-index:2;border-radius:18px;padding:6px 14px;color:var(--dsw-alias-label-primary);background:var(--dsw-alias-bg-layer-3);border:0.5px solid var(--dsw-alias-border-l3);box-shadow:0 4px 16px #0003}
 #empty{padding:32px 20px;color:var(--dsw-alias-label-tertiary)}
 .hidden{display:none!important}
