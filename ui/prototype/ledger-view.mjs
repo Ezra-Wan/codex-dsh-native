@@ -22,12 +22,16 @@ function detailBlock(text, truncated, mono) {
   return node;
 }
 
-function renderRecord(record, index) {
+// Event times are numeric epoch ms from the persistence log; accept strings too.
+const ts = value => (typeof value === 'number' ? value : Date.parse(value));
+
+function renderRecord(record, index, endAt, turnNumber) {
   const li = document.createElement('li');
   const failed = record.state === 'error' || record.state === 'interrupted';
   li.className = 'record';
   li.dataset.kind = record.kind;
   li.dataset.state = record.state ?? '';
+  li.dataset.search = `${record.name ?? ''} ${record.text ?? ''} ${record.argsText ?? ''} ${record.result?.text ?? ''}`.toLowerCase();
   const details = document.createElement('details');
   details.open = failed || record.kind !== 'tool';
   const summary = document.createElement('summary');
@@ -51,12 +55,23 @@ function renderRecord(record, index) {
     text.textContent = record.text.split('\n')[0]
       || (record.sourceKind === 'user' ? '收到任务' : record.sourceKind === 'skill-catalog' ? '技能目录' : '上下文注入');
   }
+  // Trailing metrics per toolbar mode: 时长 / 轮次 / 调用.
   const trailing = document.createElement('span');
   trailing.className = 'trailing';
-  const stamp = document.createElement('span');
-  stamp.className = 'time';
-  stamp.textContent = time(record.time);
-  trailing.append(stamp);
+  const metric = (key, value) => {
+    const el = document.createElement('span');
+    el.className = 'metric';
+    el.dataset.metric = key;
+    el.textContent = value;
+    return el;
+  };
+  const seconds = Math.max(1, Math.round((ts(endAt ?? record.time) - ts(record.time)) / 100) / 10);
+  trailing.append(
+    metric('duration', `${seconds}s`),
+    metric('turn', `回合 ${turnNumber ?? record.turn ?? 0}`),
+    metric('call', `#${index}`),
+    metric('clock', time(record.time)),
+  );
   summary.append(idx, tag, text, trailing);
   details.append(summary);
   const body = document.createElement('div');
@@ -82,7 +97,7 @@ function renderRecord(record, index) {
   return li;
 }
 
-function renderTurn(turn, startIndex) {
+function renderTurn(turn, startIndex, nextTime) {
   const section = document.createElement('li');
   section.className = 'turn';
   const head = document.createElement('div');
@@ -96,17 +111,71 @@ function renderTurn(turn, startIndex) {
   if (turn.end) {
     const badge = document.createElement('span');
     badge.className = 'turn-reason';
-    badge.textContent = REASON_LABELS[turn.end.reason] ?? turn.end.reason;
+    badge.textContent = `本轮结束 · ${turn.end.reason}`;
     inner.append(badge);
   }
   head.append(inner);
   const list = document.createElement('ul');
   list.className = 'records';
   let index = startIndex;
-  for (const record of turn.records) list.append(renderRecord(record, ++index));
+  const times = turn.records.map(record => record.time);
+  for (let i = 0; i < turn.records.length; i++) {
+    const endAt = times[i + 1] ?? turn.end?.time ?? nextTime ?? times[i];
+    const li = renderRecord(turn.records[i], ++index, endAt, turn.turn);
+    list.append(li);
+  }
   section.append(head, list);
   return section;
 }
+
+// Timing overview (TrajectoryTimeline): three fixed lanes 输入/模型/工具,
+// spans positioned proportionally across the turn's real time range.
+function timelineBar(turns) {
+  const flat = [];
+  for (const turn of turns) {
+    const times = turn.records.map(record => record.time);
+    for (let i = 0; i < turn.records.length; i++) {
+      const record = turn.records[i];
+      const endAt = times[i + 1] ?? turn.end?.time ?? record.time;
+      flat.push({ record, start: ts(record.time), end: ts(endAt) });
+    }
+  }
+  if (!flat.length) return null;
+  const t0 = Math.min(...flat.map(item => item.start));
+  const t1 = Math.max(...flat.map(item => item.end));
+  const span = Math.max(1, t1 - t0);
+  const root = document.createElement('div');
+  root.className = 'timeline';
+  const plot = document.createElement('div');
+  plot.className = 'timeline-plot';
+  const labels = document.createElement('div');
+  labels.className = 'timeline-labels';
+  for (const name of ['输入', '模型', '工具']) {
+    const el = document.createElement('span');
+    el.textContent = name;
+    labels.append(el);
+  }
+  const track = document.createElement('div');
+  track.className = 'timeline-track';
+  for (const { record, start, end } of flat) {
+    const spanEl = document.createElement('span');
+    const kind = record.kind === 'tool' ? 'tool' : record.kind === 'message' ? 'message' : record.sourceKind === 'user' ? 'user' : 'context';
+    spanEl.className = 'timeline-span';
+    spanEl.dataset.timelineSpan = kind;
+    if (record.state === 'error' || record.state === 'interrupted') spanEl.dataset.error = 'true';
+    const left = ((start - t0) / span) * 100;
+    spanEl.style.left = `${left.toFixed(2)}%`;
+    spanEl.style.width = `${Math.max(0.6, ((end - start) / span) * 100).toFixed(2)}%`;
+    spanEl.style.top = `${LANE[kind] * 14 + 4}px`;
+    spanEl.title = `${record.kind === 'tool' ? toolTitle(record).label : record.kind === 'message' ? 'DS 回复' : '输入'} · ${Math.max(1, Math.round((end - start) / 100) / 10)}s`;
+    track.append(spanEl);
+  }
+  plot.append(labels, track);
+  root.append(plot);
+  return root;
+}
+
+const LANE = { user: 0, context: 0, message: 1, tool: 2 };
 
 // Full render per replay batch; fixture sizes are small and this mirrors the
 // production loop (cursor page -> re-render), keeping follow logic honest.
@@ -138,9 +207,13 @@ export function mountLedger(container, { followButton }) {
     render(events) {
       const ledger = buildLedger(events);
       const fragment = document.createDocumentFragment();
+      const bar = timelineBar(ledger.turns);
+      if (bar) fragment.append(bar);
       let index = 0;
-      for (const turn of ledger.turns) {
-        fragment.append(renderTurn(turn, index));
+      for (let i = 0; i < ledger.turns.length; i++) {
+        const turn = ledger.turns[i];
+        const nextTime = ledger.turns[i + 1]?.records[0]?.time;
+        fragment.append(renderTurn(turn, index, nextTime));
         index += turn.records.length;
       }
       container.replaceChildren(fragment);
