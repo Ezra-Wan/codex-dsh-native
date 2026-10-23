@@ -127,6 +127,12 @@ MCP 配置新增后，需要由 Codex 重新加载服务；当前已开始的聊
 
 升级时同时调整 DSH 与 SDK 的版本，安装后跑离线检查和真实闭环，再切换使用。第一版不 fork DSH、不复制它的 agent loop，也不在启动时自动升级。这样尽量跟随上游，同时保留可重复的环境。
 
+上游 UI 复用的契约研究与三路比较见 [docs/upstream-ui-reuse.md](docs/upstream-ui-reuse.md)；离线轨迹原型见 `ui/prototype/`（`npm run prototype` 后打开 127.0.0.1:8791），来源与许可见 `ui/prototype/NOTICE.md`。
+
+## 开发流程（git）
+
+`main` 是稳定分支；基线提交打 tag `v0.1.1-baseline`。每项工作从 `main` 切出 `feature/<主题>` 或 `docs/<主题>` 分支，提交信息用 `type: 中文主题`（feat/fix/docs/test/chore），自审 diff 后以 `--no-ff` 合回 `main` 并删除特性分支。界面与协议证据保存在 `.local/<主题>-<时间戳>/review/`（git 忽略 `.local`，跨机器交接需显式复制脱敏证据）。
+
 ## 为什么先选择这一条
 
 官方 SDK 已提供可恢复原生会话和完整 profile；薄 MCP 适配就能检验你最关心的委派、上下文与并行成本。现有 hcom、CCB 等更适合继续比较跨终端通信和唤醒；若它们能稳定提供 Windows + DSH 的同类闭环，应优先接适配器，而不是扩大本项目。
