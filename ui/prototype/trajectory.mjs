@@ -3,79 +3,106 @@
 import { buildLedger, taskTitle, toolTitle } from './records.mjs';
 
 const time = value => new Date(value).toLocaleTimeString('zh-CN', { hour12: false });
-const STATE_LABELS = { ok: '结果', error: '异常', pending: '等待结果', interrupted: '已中断' };
+const REASON_LABELS = { completed: '已完成', aborted: '已中止', interrupted: '已中断', 'max-tokens': '达到输出上限' };
+// Record-kind tags mirror the native ledger palette: user green, context muted
+// green, assistant brand blue, tool amber, failures red.
+const TAGS = {
+  task: { cls: 'tagUser', label: '用户' },
+  context: { cls: 'tagContext', label: '上下文' },
+  skill: { cls: 'tagContext', label: '技能' },
+  message: { cls: 'tagMessage', label: '回复' },
+  tool: { cls: 'tagTool', label: '工具' },
+};
+const STATE_LABELS = { ok: '结果', error: '异常', pending: '进行中', interrupted: '已中断' };
 
-function pre(text, truncated, extraClass = '') {
+function detailBlock(text, truncated, mono) {
   const node = document.createElement('pre');
-  if (extraClass) node.className = extraClass;
-  node.textContent = text + (truncated ? '\n…内容较长，仅展示前段。' : '');
+  if (mono) node.className = 'mono';
+  node.textContent = text + (truncated ? '\n…' : '');
   return node;
 }
 
-function renderRecord(record) {
+function renderRecord(record, index) {
   const li = document.createElement('li');
   const failed = record.state === 'error' || record.state === 'interrupted';
-  li.className = `record ${record.kind}${failed ? ' failed' : ''}${record.state === 'pending' ? ' waiting' : ''}`;
+  li.className = 'record';
+  li.dataset.kind = record.kind;
+  li.dataset.state = record.state ?? '';
   const details = document.createElement('details');
-  const openByDefault = record.kind !== 'tool' || failed;
-  if (openByDefault) details.open = true;
+  details.open = failed || record.kind !== 'tool';
   const summary = document.createElement('summary');
+  summary.className = 'row';
+  const idx = document.createElement('span');
+  idx.className = 'idx';
+  idx.textContent = `#${index}`;
+  const tag = document.createElement('span');
+  let tagKey = record.kind;
+  if (record.kind === 'task') tagKey = record.sourceKind === 'user' ? 'task' : record.sourceKind === 'skill-catalog' ? 'skill' : 'context';
+  if (failed) { tag.className = 'tag tagError'; tag.textContent = STATE_LABELS[record.state]; }
+  else { tag.className = `tag ${TAGS[tagKey].cls}`; tag.textContent = TAGS[tagKey].label; }
+  const text = document.createElement('span');
+  text.className = 'cell-text';
+  if (record.kind === 'tool') {
+    const { label, path } = toolTitle(record);
+    text.textContent = path ? `${label} · ${path}` : label;
+  } else if (record.kind === 'message') {
+    text.textContent = record.text.split('\n')[0] || '（空回复）';
+  } else {
+    text.textContent = record.text.split('\n')[0] || taskTitle(record);
+  }
+  const trailing = document.createElement('span');
+  trailing.className = 'trailing';
   const stamp = document.createElement('span');
   stamp.className = 'time';
   stamp.textContent = time(record.time);
-  const title = document.createElement('span');
-  title.className = 'label';
-  const chip = document.createElement('span');
-  chip.className = 'chip';
-  if (record.kind === 'task') {
-    title.textContent = taskTitle(record);
-    chip.textContent = '输入';
-  } else if (record.kind === 'message') {
-    title.textContent = 'DS 回复';
-    chip.textContent = '消息';
-  } else {
-    const { label, path } = toolTitle(record);
-    title.textContent = path ? `${label} · ${path}` : label;
-    chip.textContent = STATE_LABELS[record.state];
-    if (record.state === 'pending') li.classList.add('waiting');
-  }
-  summary.append(stamp, title, chip);
+  trailing.append(stamp);
+  summary.append(idx, tag, text, trailing);
   details.append(summary);
+  const body = document.createElement('div');
+  body.className = 'detail';
   if (record.kind === 'tool') {
-    if (record.argsText) details.append(pre(record.argsText, record.truncated, 'args'));
-    if (record.result) details.append(pre(record.result.text, record.result.truncated));
-    else if (record.orphan) details.append(pre('调用记录不在已读取范围内，仅剩结果。', false, 'args'));
+    if (record.argsText) body.append(detailBlock(record.argsText, record.truncated, true));
+    if (record.result) body.append(detailBlock(record.result.text, record.result.truncated, true));
+    else if (record.orphan) body.append(detailBlock('调用记录不在已读取范围内，仅剩结果。', false, true));
   } else {
-    const body = document.createElement('div');
-    body.className = 'prose';
-    body.textContent = record.text;
-    details.append(body);
+    const prose = document.createElement('div');
+    prose.className = 'prose';
+    prose.textContent = record.text;
+    body.append(prose);
     if (record.truncated) {
       const note = document.createElement('div');
       note.className = 'truncated-note';
-      note.textContent = '内容较长，仅展示前 8000 字符；完整内容在原生日志中。';
-      details.append(note);
+      note.textContent = '内容较长，仅展示前 8000 字符。';
+      body.append(note);
     }
   }
+  details.append(body);
   li.append(details);
   return li;
 }
 
-function renderTurn(turn) {
+function renderTurn(turn, startIndex) {
   const section = document.createElement('li');
   section.className = 'turn';
   const head = document.createElement('div');
   head.className = 'turn-head';
-  head.innerHTML = `<span class="turn-name">${turn.turn === 0 ? '准备' : `回合 ${turn.turn}`}</span>`;
+  const inner = document.createElement('div');
+  inner.className = 'turn-inner';
+  const title = document.createElement('span');
+  title.className = 'turn-title';
+  title.textContent = turn.turn === 0 ? '准备' : `回合 ${turn.turn}`;
+  inner.append(title);
   if (turn.end) {
     const badge = document.createElement('span');
-    badge.className = `turn-badge${['completed'].includes(turn.end.reason) ? '' : ' bad'}`;
-    badge.textContent = `本轮结束 · ${turn.end.reason}`;
-    head.append(badge);
+    badge.className = 'turn-reason';
+    badge.textContent = REASON_LABELS[turn.end.reason] ?? turn.end.reason;
+    inner.append(badge);
   }
+  head.append(inner);
   const list = document.createElement('ul');
   list.className = 'records';
-  for (const record of turn.records) list.append(renderRecord(record));
+  let index = startIndex;
+  for (const record of turn.records) list.append(renderRecord(record, ++index));
   section.append(head, list);
   return section;
 }
@@ -110,7 +137,11 @@ export function mountLedger(container, { followButton }) {
     render(events) {
       const ledger = buildLedger(events);
       const fragment = document.createDocumentFragment();
-      for (const turn of ledger.turns) fragment.append(renderTurn(turn));
+      let index = 0;
+      for (const turn of ledger.turns) {
+        fragment.append(renderTurn(turn, index));
+        index += turn.records.length;
+      }
       container.replaceChildren(fragment);
       if (following) {
         lastTailWrite = Date.now();

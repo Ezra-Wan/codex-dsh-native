@@ -3,95 +3,112 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>DSH 轨迹原型 · 真实记录回放</title>
+<title>DSH 执行记录</title>
 <style>
+/* Design tokens from @deepseek-ai/dsh-client-ui-theme (0.2.1-rc.2, MIT):
+   alias surfaces/labels/state colors, radius and type scales. Light values
+   from the default theme, dark values from the dark theme mapping. */
 :root{
-  color-scheme:light dark;
-  --bg:var(--color-background-primary,#fff);--ink:var(--color-text-primary,#202124);
-  --muted:var(--color-text-secondary,#737373);--line:var(--color-border-primary,#dededb);
-  --soft:var(--color-background-secondary,#f5f5f2);--warn:#a34d0b;--warn-bg:#fff2db;
-  --accent:#497eaa;
+  color-scheme:light;
+  --layer-1:#fff;--layer-2:#fff;--layer-3:#fff;
+  --module-platform:#f5f6f7;--ghost-active:#ebeef2;
+  --border-l4:#00000029;
+  --label-1:#0f1115;--label-2:#61666b;--label-3:#81858c;
+  --success:#22c55e;--success-bg:#e6faed;
+  --warn:#dd8629;--warn-bg:#fef5e7;
+  --error:#ec1313;--error-2:#f25a5a;
+  --brand:#5686fe;
+  --radius-xs:4px;--radius-sm:8px;--radius-md:12px;
+  --font:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,"PingFang SC","Microsoft YaHei",sans-serif;
+  --mono:ui-monospace,"SF Mono","Cascadia Code",Consolas,monospace;
+  --f-xs:13px/20px var(--font);--f-xs-strong:500 13px/20px var(--font);
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]){
+  color-scheme:dark;
+  --layer-1:#232324;--layer-2:#2c2c2e;--layer-3:#353638;
+  --module-platform:#353638;--ghost-active:#43454a;
+  --border-l4:#ffffff33;
+  --label-1:#f9fafb;--label-2:#cfd3d6;--label-3:#adb2b8;
+  --success-bg:#233c2c;
+  --warn-bg:#27241f;
+  --error:#f25a5a;
+}}
+:root[data-theme=dark]{
+  color-scheme:dark;
+  --layer-1:#232324;--layer-2:#2c2c2e;--layer-3:#353638;
+  --module-platform:#353638;--ghost-active:#43454a;
+  --border-l4:#ffffff33;
+  --label-1:#f9fafb;--label-2:#cfd3d6;--label-3:#adb2b8;
+  --success-bg:#233c2c;
+  --warn-bg:#27241f;
+  --error:#f25a5a;
 }
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.55 var(--font-sans,system-ui,sans-serif)}
-html[data-theme=dark]{color-scheme:dark;
-  --bg:var(--color-background-primary,#202124);--ink:var(--color-text-primary,#eee);
-  --muted:var(--color-text-secondary,#aaa);--line:var(--color-border-primary,#484848);
-  --soft:var(--color-background-secondary,#2b2c2d);--warn:#f2bd73;--warn-bg:#342a1c}
-header{display:flex;gap:12px;align-items:baseline;justify-content:space-between;padding:14px 16px 0}
-.eyebrow{font-size:11px;letter-spacing:.08em;color:var(--muted)}
-h1{font-size:16px;margin:4px 0 0;font-weight:650}
-#stats{font-size:12px;color:var(--muted);padding:0 16px}
-.toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:10px 16px;border-bottom:1px solid var(--line)}
-button,select{font:inherit;color:inherit;background:var(--bg);border:1px solid var(--line);border-radius:5px;padding:4px 9px;cursor:pointer}
-button:hover,select:hover{background:var(--soft)}
-button:disabled{cursor:default;opacity:.45}
-button:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-label{font-size:12px;display:flex;gap:4px;align-items:center;color:var(--muted)}
-#stage{display:flex;justify-content:center;padding:12px 16px 24px}
-#panel{width:100%;max-width:980px;position:relative}
-#panel.w380{width:380px;max-width:100%}
-#panel.w720{width:720px;max-width:100%}
-#ledger{position:relative;height:62vh;overflow-y:auto;border:1px solid var(--line);border-radius:8px;padding:6px 0}
-#ledger ul{list-style:none;margin:0;padding:0 12px}
-.turn{padding:4px 0}
-.turn-head{display:flex;gap:8px;align-items:center;padding:6px 0 2px;font-size:12px;color:var(--muted)}
-.turn-name{font-weight:650;letter-spacing:.04em}
-.turn-badge{border:1px solid var(--line);border-radius:4px;padding:1px 6px}
-.turn-badge.bad{color:var(--warn);border-color:var(--warn)}
-.records .record{border-bottom:1px solid var(--line);padding:8px 0}
-.record:last-child{border-bottom:0}
-.record summary{cursor:pointer;display:flex;gap:10px;align-items:baseline;list-style:none}
+body{margin:0;background:var(--layer-1);color:var(--label-1);font:var(--f-xs)}
+header{max-width:880px;margin:0 auto;padding:16px 16px 4px}
+h1{font:600 15px/22px var(--font);margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.toolbar{display:flex;gap:8px;align-items:center;max-width:880px;margin:0 auto;padding:8px 16px 8px}
+button,select{font:var(--f-xs);color:var(--label-1);background:var(--layer-2);border:0.5px solid var(--border-l4);border-radius:var(--radius-sm);padding:5px 12px;cursor:pointer}
+button:hover{background:var(--ghost-active)}
+button:disabled{cursor:default;opacity:.4}
+button:focus-visible,select:focus-visible{outline:2px solid var(--brand);outline-offset:1px}
+#stage{padding:0 16px 20px}
+#panel{position:relative;max-width:880px;margin:0 auto}
+#ledger{height:calc(100vh - 118px);min-height:320px;overflow-y:auto;border:0.5px solid var(--border-l4);border-radius:var(--radius-md);background:var(--layer-2);overscroll-behavior:contain}
+#ledger ul{list-style:none;margin:0;padding:0}
+/* Sticky turn bar: ghost-active fill, centered content lane. */
+.turn-head{position:sticky;top:0;z-index:1;height:44px;background:var(--ghost-active)}
+.turn-inner{display:flex;align-items:center;justify-content:space-between;height:100%;max-width:848px;margin:0 auto;padding:0 16px}
+.turn-title{font:var(--f-xs-strong)}
+.turn-reason{font:var(--f-xs);color:var(--label-2)}
+.records{padding:8px 16px 12px}
+/* 38px step cell: index · kind tag · text · time. */
+.record details{border-radius:var(--radius-md);border:0.5px solid var(--border-l4);background:var(--layer-3);margin-bottom:6px}
+.record summary{list-style:none;display:flex;align-items:center;height:38px;padding:0 8px 0 12px;gap:16px;cursor:pointer;min-width:0}
 .record summary::-webkit-details-marker{display:none}
-.record .time{font:11px/1.4 ui-monospace,monospace;color:var(--muted);flex-shrink:0}
-.record .label{font-weight:550;overflow-wrap:anywhere}
-.record .chip{margin-left:auto;flex-shrink:0;font-size:11px;color:var(--muted);border:1px solid var(--line);border-radius:4px;padding:0 6px}
-.record.failed{border-left:3px solid var(--warn);padding-left:8px}
-.record.failed .label,.record.failed .chip{color:var(--warn)}
-.record.waiting{border-left:3px dashed var(--line);padding-left:8px}
-.record.waiting .chip{color:var(--accent);border-color:var(--accent)}
-pre{background:var(--soft);padding:9px;border-radius:4px;margin:8px 0 2px;white-space:pre-wrap;overflow-wrap:anywhere;font:12px/1.55 ui-monospace,monospace;max-height:300px;overflow:auto}
-.prose{white-space:pre-wrap;margin-top:6px;overflow-wrap:anywhere}
-.truncated-note{font-size:12px;color:var(--muted);margin-top:4px}
-#follow{position:absolute;right:22px;bottom:34px;z-index:2;box-shadow:0 2px 8px rgba(0,0,0,.25)}
+.record summary:focus-visible{outline:2px solid var(--brand);outline-offset:-2px;border-radius:var(--radius-md)}
+.idx{flex:none;width:28px;color:var(--label-3);font:var(--f-xs)}
+.tag{flex:none;display:inline-flex;align-items:center;height:22px;padding:0 8px;border-radius:var(--radius-xs);font:var(--f-xs-strong);white-space:nowrap}
+.tagUser{color:var(--success);background:var(--success-bg)}
+.tagContext{color:color-mix(in srgb,var(--success) 68%,var(--label-2));background:var(--success-bg)}
+.tagMessage{color:color-mix(in srgb,var(--brand) 72%,var(--label-1));background:color-mix(in srgb,var(--brand) 14%,var(--layer-3))}
+.tagTool{color:var(--warn);background:var(--warn-bg)}
+.tagError{color:var(--error);background:color-mix(in srgb,var(--error-2) 12%,var(--layer-3))}
+.cell-text{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:var(--f-xs);color:var(--label-1)}
+.trailing{flex:none;margin-left:auto;display:flex;align-items:center}
+.time{width:64px;font:var(--f-xs);color:var(--label-3);white-space:nowrap}
+/* Expanded detail under the collapsed row. */
+.detail{padding:2px 12px 10px 56px}
+.detail pre{margin:6px 0 0;padding:8px 10px;border-radius:var(--radius-sm);background:var(--module-platform);font:12px/18px var(--mono);white-space:pre-wrap;overflow-wrap:anywhere;max-height:280px;overflow:auto;color:var(--label-1)}
+.record[data-state=error] .detail pre,.record[data-state=interrupted] .detail pre{background:color-mix(in srgb,var(--error-2) 8%,var(--layer-3))}
+.prose{margin:6px 0 0;padding:2px 2px 0;font:var(--f-xs);color:var(--label-1);white-space:pre-wrap;overflow-wrap:anywhere}
+.truncated-note{margin-top:4px;font:var(--f-xs);color:var(--label-3)}
+#follow{position:absolute;right:20px;bottom:20px;z-index:2;border-radius:20px;padding:6px 14px;box-shadow:0 4px 16px #0003}
+#empty{padding:32px 20px;color:var(--label-3)}
 .hidden{display:none!important}
-footer{padding:0 16px 16px;font-size:11px;color:var(--muted)}
+@media (max-width:480px){.records{padding:6px 8px 10px}.record summary{gap:8px;padding-left:8px}.idx{display:none}.detail{padding-left:12px}.time{width:auto}}
 </style>
 </head>
 <body>
-<header>
-  <div>
-    <div class="eyebrow">DEEPSEEK HARNESS · 轨迹原型</div>
-    <h1 id="title">真实记录回放</h1>
-  </div>
-  <span class="eyebrow">最小展示组件 · 非原生界面</span>
-</header>
-<p id="stats">加载中…</p>
+<header><h1 id="title">DSH 执行记录</h1></header>
 <nav class="toolbar">
-  <select id="fixture" aria-label="选择回放记录">
+  <select id="fixture" aria-label="选择执行记录">
     <option value="demo-1792663550562.json">演示任务（含命令失败与恢复）</option>
     <option value="ui-check-1792664983899.json">界面小测试（读→写→校验）</option>
-    <option value="stress-long.json">压力样本（长结果截断，合成）</option>
+    <option value="stress-long.json">长结果记录</option>
   </select>
   <button id="replay" type="button">逐步回放</button>
-  <span class="eyebrow">宽度</span>
-  <button id="w380" type="button">380</button>
-  <button id="w720" type="button">720</button>
-  <button id="wfull" type="button">自适应</button>
-  <span class="eyebrow">主题</span>
-  <button id="tauto" type="button">自动</button>
-  <button id="tlight" type="button">亮</button>
-  <button id="tdark" type="button">暗</button>
 </nav>
 <div id="stage"><div id="panel">
-  <div id="ledger" aria-label="执行轨迹账本">
-    <p id="empty" style="padding:24px 12px;color:var(--muted)">选择记录后回放。</p>
+  <div id="ledger" aria-label="执行记录">
+    <p id="empty">正在载入记录…</p>
   </div>
   <button id="follow" class="hidden" type="button">回到最新</button>
 </div></div>
-<footer>事件来自 DSH 原生持久化日志（ds_events 同源）；本页离线回放，不调用模型。展示概念来源见 NOTICE.md。</footer>
 <script type="module">
 import { mountLedger } from './trajectory.mjs';
+const forced = new URLSearchParams(location.search).get('theme');
+if (forced === 'light' || forced === 'dark') document.documentElement.dataset.theme = forced;
 const $ = id => document.getElementById(id);
 let all = [];
 const ledger = mountLedger($('ledger'), { followButton: $('follow') });
@@ -100,8 +117,7 @@ async function load(name) {
   all = fixture.events;
   $('title').textContent = fixture.label;
   $('empty')?.remove();
-  const result = ledger.render(all);
-  $('stats').textContent = `事件 ${result.stats.events} · 回合 ${result.stats.turns} · 工具 ${result.stats.tools} · 异常 ${result.stats.errors} · 会话 ${fixture.session_id.slice(0, 8)}…`;
+  ledger.render(all);
 }
 let replaying = false;
 $('replay').addEventListener('click', async () => {
@@ -116,13 +132,6 @@ $('replay').addEventListener('click', async () => {
   $('replay').disabled = false;
 });
 $('fixture').addEventListener('change', () => load($('fixture').value));
-const theme = value => { if (value === 'auto') delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = value; };
-$('w380').addEventListener('click', () => { $('panel').className = 'w380'; });
-$('w720').addEventListener('click', () => { $('panel').className = 'w720'; });
-$('wfull').addEventListener('click', () => { $('panel').className = ''; });
-$('tauto').addEventListener('click', () => theme('auto'));
-$('tlight').addEventListener('click', () => theme('light'));
-$('tdark').addEventListener('click', () => theme('dark'));
 await load($('fixture').value);
 </script>
 </body>
