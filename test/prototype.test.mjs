@@ -44,6 +44,7 @@ test('buildLedger pairs tools, keeps the error and groups by turn (demo)', () =>
   assert.deepEqual(tools.map(record => record.state).sort(), ['error', 'ok', 'ok', 'ok', 'ok', 'ok']);
   const tasks = ledger.turns[0].records.filter(record => record.kind === 'task');
   assert.equal(tasks.length, 3, 'prompt messages join the turn they started');
+  assert.deepEqual(tasks.map(record => record.sourceKind), ['user', 'runtime-context', 'skill-catalog'], 'producers are classified, not flattened');
   assert.equal(ledger.turns[0].records.findIndex(record => record.kind === 'tool'), 3, 'tasks precede the first tool call');
   const failed = tools.find(record => record.state === 'error');
   assert.equal(failed.name, 'pwsh');
@@ -53,11 +54,14 @@ test('buildLedger pairs tools, keeps the error and groups by turn (demo)', () =>
   assert.equal(ledger.turns[0].records.at(-1).kind, 'message', 'assistant reply is the last record before the boundary');
 });
 
-test('buildLedger handles pending calls and orphan results', () => {
+test('buildLedger handles pending, interrupted and orphan results', () => {
   const demo = fixtures['demo-1792663550562.json'];
   const lastResult = demo.events.findLastIndex(event => event.type === 'tool/result');
+  // Turn boundary retained: an open call at a closed turn is interrupted, never eternal pending.
   const withoutLastResult = buildLedger(demo.events.filter((event, index) => index !== lastResult));
-  assert.ok(withoutLastResult.turns[0].records.some(record => record.kind === 'tool' && record.state === 'pending'), 'dropping a result leaves the call pending, not silently ok');
+  assert.ok(withoutLastResult.turns[0].records.some(record => record.kind === 'tool' && record.state === 'interrupted' && record.interruptedAt), 'open call at a closed turn becomes interrupted');
+  const openTurn = demo.events.filter((event, index) => index !== lastResult && event.type !== 'turn/end');
+  assert.ok(buildLedger(openTurn).turns[0].records.some(record => record.kind === 'tool' && record.state === 'pending'), 'open call in a live turn stays pending');
   const firstCall = demo.events.findIndex(event => event.type === 'tool/call');
   const orphan = buildLedger(demo.events.filter((event, index) => index !== firstCall));
   assert.ok(orphan.turns[0].records.some(record => record.kind === 'tool' && record.orphan), 'a result without its call stays visible as orphan');
