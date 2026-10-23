@@ -71,14 +71,7 @@ export function buildLedger(events) {
   return { turns, stats: { events: events.length, turns: turns.length, tools, errors } };
 }
 
-export const TOOL_LABELS = { read: '读取', write: '写入', edit: '修改', pwsh: '执行命令' };
-// Producer labels follow the native trajectory: real prompts, context
-// injections and catalogs are different records, not one "收到任务".
-export const SOURCE_LABELS = { user: '收到任务', 'runtime-context': '上下文注入', 'skill-catalog': '技能目录' };
-
-export function taskTitle(record) {
-  return SOURCE_LABELS[record.sourceKind] ?? `输入 · ${record.sourceKind}`;
-}
+export const TOOL_LABELS = { read: '读取', write: '写入', edit: '修改', pwsh: '运行命令' };
 
 export function toolTitle(record) {
   if (record.orphan) return { label: '工具结果（未配对）', path: null };
