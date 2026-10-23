@@ -1,0 +1,184 @@
+{
+  "label": "演示任务：读→写→命令失败→读回恢复",
+  "session_id": "bc243aa7-57aa-47b5-b219-c73a6a45c5ed",
+  "source": "native-dsh-session-log",
+  "extractedAt": "2026-10-23T11:34:38.867Z",
+  "extractor": "scripts/extract-fixtures.mjs (production readNativeEvents)",
+  "events": [
+    {
+      "seq": 4,
+      "time": 1792663565444,
+      "type": "turn/start",
+      "turn": 1
+    },
+    {
+      "seq": 8,
+      "time": 1792663565549,
+      "type": "user/message",
+      "text": "这是一次简短的真实桥接演示。使用原生文件工具读取工作区的 input.json，计算总订单数、总收入、整体客单价（总收入/总订单数，四舍五入到两位小数）及收入最高的一天。只创建两个文件：result.json（字段 batch,total_orders,total_revenue,average_order_value,top_day），summary.md（一段不超过120字的中文业务总结）。不要改 input.json，不要访问工作区外的文件，不要安装任何依赖。请记住 input.json 的 batch 和计算结果，下一轮会继续问你。最后用不超过100字报告结果与文件名。",
+      "truncated": false
+    },
+    {
+      "seq": 9,
+      "time": 1792663565551,
+      "type": "user/message",
+      "text": "Current runtime context. This snapshot supersedes earlier runtime-context snapshots.\n\nCurrent working directory: \"D:\\\\@harness\\\\codex-dsh-native-p0\\\\.local\\\\demo-1792663550562\\\\workspace\".\n\nCurrent DSH file policy: workspace-write. Any available operation enforced by the DSH file sandbox may modify files under the session workspace: \"D:\\\\@harness\\\\codex-dsh-native-p0\\\\.local\\\\demo-1792663550562\\\\workspace\". Some platform temporary areas may also be writable.\n\nApproval policy: ask. Operations that require approval may ask through the configured answerers; without an available answerer, the request fails closed.",
+      "truncated": false
+    },
+    {
+      "seq": 10,
+      "time": 1792663565552,
+      "type": "user/message",
+      "text": "<system-reminder>\nA skill is a reusable set of task-specific instructions. The following skills are available in this session:\n\n<available_skills>\n- `banner-design`: Design banners for social media, ads, website heroes, creative assets, and print. Multiple art direction options with AI-generated visuals. Actions: design, create, generate banner. Platforms: Facebook, Twitter/X, LinkedIn, YouTube, Instagram, Google Display, website hero, print. Styles: minimalist, gradient, bold typography, photo-based, illustrated, geometric, retro, glassmorphism, 3D, neon, duotone, editorial, collage. Uses ui-ux-pro-max, frontend-design, ai-artist, ai-multimodal skills.\n- `brand`: Brand voice, visual identity, messaging frameworks, asset management, brand consistency. Activate for branded content, tone of voice, marketing assets, brand compliance, style guides.\n- `design`: Comprehensive design skill: brand identity, design tokens, UI styling, logo generation (55 styles, Gemini AI), corporate identity program (50 deliverables, CIP mockups), HTML presentations (Chart.js), banner design (22 styles, social/ads/web/print), icon design (15 styles, SVG, Gemini 3.1 Pro), social photos (HTML→screenshot, multi-platform). Actions: design logo, create CIP, generate mockups, build slides, design banner, generate icon, create social photos, social media images, brand identit...\n- `design-system`: Token architecture, component specifications, and slide generation. Three-layer tokens (primitive→semantic→component), CSS variables, spacing/typography scales, component specs, strategic slide creation. Use for design tokens, systematic design, brand-compliant presentations.\n- `diagnose-windows-sandbox-acl`: Use on Windows for unexpected DSH sandbox access denials: workspace writes or listing fail, or an ordinarily readable path cannot be read. One bundled command inspects the path and every ancestor and repairs the ACL problems it proves in that same run. Expected confinement denials need no ACL repair.\n- `slides`: Create strategic HTML presentations with Chart.js, design tokens, responsive layouts, copywriting formulas, and contextual slide strategies.\n- `ui-styling`: Create beautiful, accessible user interfaces with shadcn/ui components (built on Radix UI + Tailwind), Tailwind CSS utility-first styling, and canvas-based visual designs. Use when building user interfaces, implementing design systems, creating responsive layouts, adding accessible components (dialogs, dropdowns, forms, tables), customizing themes and colors, implementing dark mode, generating visual designs and posters, or establishing consistent styling patterns across applications.\n- `ui-ux-pro-max`: UI/UX design intelligence for web, mobile, and desktop. This skill should be used when designing, building, reviewing, or fixing interfaces, including pages, components, design systems, accessibility, interaction, responsive layout, typography, color, charts, and stack-specific UI implementation. Searchable local data: 79 searchable styles (50 active), 192 product palettes and reasoning profiles, 74 font pairings, 119 UX guidelines, 105 icons, 17 GSAP presets, 25 chart types, and 22 stacks.\n</available_skills>\n\nIf the user names a skill, or the task clearly matches a skill's description, call the `skill` tool with the exact skill name before taking task actions. Load all applicable skills, then follow their full instructions. This catalog contains summaries only; do not infer or follow a skill's instructions until it has been loaded.\nA user may also invoke a skill directly; its <skill_content> block then appears in this conversation. Follow it, and do not call the `skill` tool again for that skill.\n</system-reminder>",
+      "truncated": false
+    },
+    {
+      "seq": 16,
+      "time": 1792663567967,
+      "type": "tool/call",
+      "turn": 1,
+      "step": 1,
+      "callId": "call_00_eCLj7Mm9lfE2hrzlveH28112",
+      "name": "read",
+      "text": "{\"file_path\": \"D:\\\\@harness\\\\codex-dsh-native-p0\\\\.local\\\\demo-1792663550562\\\\workspace\\\\input.json\"}",
+      "truncated": false
+    },
+    {
+      "seq": 17,
+      "time": 1792663567983,
+      "type": "tool/result",
+      "turn": 1,
+      "step": 1,
+      "callId": "call_00_eCLj7Mm9lfE2hrzlveH28112",
+      "isError": false,
+      "text": "<path>D:\\@harness\\codex-dsh-native-p0\\.local\\demo-1792663550562\\workspace\\input.json</path>\n<type>file</type>\n<content>\n1: {\"batch\":\"纸飞机-550562\",\"currency\":\"CNY\",\"days\":[{\"day\":\"周一\",\"orders\":12,\"revenue\":360},{\"day\":\"周二\",\"orders\":8,\"revenue\":280},{\"day\":\"周三\",\"orders\":15,\"revenue\":525},{\"day\":\"周四\",\"orders\":10,\"revenue\":300},{\"day\":\"周五\",\"orders\":20,\"revenue\":760}]}\n\n(End of file - total 1 lines)\n</content>",
+      "truncated": false
+    },
+    {
+      "seq": 22,
+      "time": 1792663570531,
+      "type": "tool/call",
+      "turn": 1,
+      "step": 2,
+      "callId": "call_00_f4uGUfrjXzbLvjiKqiSW7502",
+      "name": "write",
+      "text": "{\"file_path\": \"D:\\\\@harness\\\\codex-dsh-native-p0\\\\.local\\\\demo-1792663550562\\\\workspace\\\\result.json\", \"content\": \"{\\n  \\\"batch\\\": \\\"纸飞机-550562\\\",\\n  \\\"total_orders\\\": 65,\\n  \\\"total_revenue\\\": 2225,\\n  \\\"average_order_value\\\": 34.23,\\n  \\\"top_day\\\": \\\"周五\\\"\\n}\\n\"}",
+      "truncated": false
+    },
+    {
+      "seq": 23,
+      "time": 1792663570566,
+      "type": "tool/result",
+      "turn": 1,
+      "step": 2,
+      "callId": "call_00_f4uGUfrjXzbLvjiKqiSW7502",
+      "isError": false,
+      "text": "<path>D:\\@harness\\codex-dsh-native-p0\\.local\\demo-1792663550562\\workspace\\result.json</path>\n<type>file</type>\n<content>\nCreated file\n</content>",
+      "truncated": false
+    },
+    {
+      "seq": 24,
+      "time": 1792663570566,
+      "type": "tool/call",
+      "turn": 1,
+      "step": 2,
+      "callId": "call_01_T4YEpQcNKBFW1kHlZS5M8436",
+      "name": "write",
+      "text": "{\"file_path\": \"D:\\\\@harness\\\\codex-dsh-native-p0\\\\.local\\\\demo-1792663550562\\\\workspace\\\\summary.md\", \"content\": \"本批次（纸飞机-550562）共五天数据，累计订单65笔、收入2225元，整体客单价34.23元。周五表现最佳，单日订单20笔、收入760元，为本周收入最高的一天；周三次之。建议关注周二低谷，并围绕周五高峰加强备货与人力配置。\\n\"}",
+      "truncated": false
+    },
+    {
+      "seq": 25,
+      "time": 1792663570590,
+      "type": "tool/result",
+      "turn": 1,
+      "step": 2,
+      "callId": "call_01_T4YEpQcNKBFW1kHlZS5M8436",
+      "isError": false,
+      "text": "<path>D:\\@harness\\codex-dsh-native-p0\\.local\\demo-1792663550562\\workspace\\summary.md</path>\n<type>file</type>\n<content>\nCreated file\n</content>",
+      "truncated": false
+    },
+    {
+      "seq": 30,
+      "time": 1792663573300,
+      "type": "tool/call",
+      "turn": 1,
+      "step": 3,
+      "callId": "call_00_1XUNvaX1FjrqmEBPkNPl0818",
+      "name": "pwsh",
+      "text": "{\"command\": \"$j = Get-Content -Raw result.json | ConvertFrom-Json; $j | Format-List; $s = (Get-Content -Raw summary.md).Trim(); \\\"summary chars: $($s.Length)\\\"\", \"description\": \"Validate result JSON and summary length\"}",
+      "truncated": false
+    },
+    {
+      "seq": 33,
+      "time": 1792663573337,
+      "type": "tool/result",
+      "turn": 1,
+      "step": 3,
+      "callId": "call_00_1XUNvaX1FjrqmEBPkNPl0818",
+      "isError": true,
+      "text": "Error: SetNamedSecurityInfoW failed (Win32 5): grantWrite(D:\\@harness\\codex-dsh-native-p0\\.local\\demo-1792663550562\\workspace)",
+      "truncated": false
+    },
+    {
+      "seq": 38,
+      "time": 1792663575686,
+      "type": "tool/call",
+      "turn": 1,
+      "step": 4,
+      "callId": "call_00_zKddYGm96A0Jfu8pKPtp5201",
+      "name": "read",
+      "text": "{\"file_path\": \"D:\\\\@harness\\\\codex-dsh-native-p0\\\\.local\\\\demo-1792663550562\\\\workspace\\\\result.json\"}",
+      "truncated": false
+    },
+    {
+      "seq": 39,
+      "time": 1792663575687,
+      "type": "tool/call",
+      "turn": 1,
+      "step": 4,
+      "callId": "call_01_P52g5EB1Zf8YTgaPpOye0252",
+      "name": "read",
+      "text": "{\"file_path\": \"D:\\\\@harness\\\\codex-dsh-native-p0\\\\.local\\\\demo-1792663550562\\\\workspace\\\\summary.md\"}",
+      "truncated": false
+    },
+    {
+      "seq": 40,
+      "time": 1792663575705,
+      "type": "tool/result",
+      "turn": 1,
+      "step": 4,
+      "callId": "call_00_zKddYGm96A0Jfu8pKPtp5201",
+      "isError": false,
+      "text": "<path>D:\\@harness\\codex-dsh-native-p0\\.local\\demo-1792663550562\\workspace\\result.json</path>\n<type>file</type>\n<content>\n1: {\n2:   \"batch\": \"纸飞机-550562\",\n3:   \"total_orders\": 65,\n4:   \"total_revenue\": 2225,\n5:   \"average_order_value\": 34.23,\n6:   \"top_day\": \"周五\"\n7: }\n\n(End of file - total 7 lines)\n</content>",
+      "truncated": false
+    },
+    {
+      "seq": 41,
+      "time": 1792663575708,
+      "type": "tool/result",
+      "turn": 1,
+      "step": 4,
+      "callId": "call_01_P52g5EB1Zf8YTgaPpOye0252",
+      "isError": false,
+      "text": "<path>D:\\@harness\\codex-dsh-native-p0\\.local\\demo-1792663550562\\workspace\\summary.md</path>\n<type>file</type>\n<content>\n1: 本批次（纸飞机-550562）共五天数据，累计订单65笔、收入2225元，整体客单价34.23元。周五表现最佳，单日订单20笔、收入760元，为本周收入最高的一天；周三次之。建议关注周二低谷，并围绕周五高峰加强备货与人力配置。\n\n(End of file - total 1 lines)\n</content>",
+      "truncated": false
+    },
+    {
+      "seq": 45,
+      "time": 1792663579195,
+      "type": "assistant/message",
+      "turn": 1,
+      "step": 5,
+      "text": "计算完成，已生成以下两个文件：\n\n- `result.json`：batch 为 `纸飞机-550562`，总订单数 65 笔，总收入 2225 元，整体客单价 34.23 元，收入最高的一天是周五（760 元）。\n- `summary.md`：一份中文业务总结，约 116 字。\n\n我已记住本批次信息，下一轮可直接继续提问。",
+      "truncated": false
+    },
+    {
+      "seq": 47,
+      "time": 1792663579196,
+      "type": "turn/end",
+      "turn": 1,
+      "reason": "completed"
+    }
+  ]
+}

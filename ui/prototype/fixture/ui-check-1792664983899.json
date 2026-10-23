@@ -1,0 +1,118 @@
+{
+  "label": "界面小测试：读→写→读回校验通过",
+  "session_id": "a87de710-cab5-4c2e-bb9d-df546c70d212",
+  "source": "native-dsh-session-log",
+  "extractedAt": "2026-10-23T11:34:38.875Z",
+  "extractor": "scripts/extract-fixtures.mjs (production readNativeEvents)",
+  "events": [
+    {
+      "seq": 4,
+      "time": 1792664999905,
+      "type": "turn/start",
+      "turn": 1
+    },
+    {
+      "seq": 8,
+      "time": 1792665000024,
+      "type": "user/message",
+      "text": "这是一次 Codex 内嵌执行记录的小测试。仅在当前工作区执行：读取 input.json，计算条目数、value 总和、平均值及最大值条目的 name，写入 result.json，字段准确为 batch（保留输入值）、count、total、average、largest。写完后使用原生 read 工具回读 result.json 检查。使用原生文件工具即可，无需 shell、安装或访问网络。只创建 result.json，不修改 input.json 或工作区外文件。若遇到工具错误明确报告。最终用不超过80个汉字报告结果与验证方式。",
+      "truncated": false
+    },
+    {
+      "seq": 9,
+      "time": 1792665000025,
+      "type": "user/message",
+      "text": "Current runtime context. This snapshot supersedes earlier runtime-context snapshots.\n\nCurrent working directory: \"D:\\\\@harness\\\\codex-dsh-native-p0\\\\.local\\\\ui-check-1792664983899\\\\workspace\".\n\nCurrent DSH file policy: workspace-write. Any available operation enforced by the DSH file sandbox may modify files under the session workspace: \"D:\\\\@harness\\\\codex-dsh-native-p0\\\\.local\\\\ui-check-1792664983899\\\\workspace\". Some platform temporary areas may also be writable.\n\nApproval policy: ask. Operations that require approval may ask through the configured answerers; without an available answerer, the request fails closed.",
+      "truncated": false
+    },
+    {
+      "seq": 10,
+      "time": 1792665000026,
+      "type": "user/message",
+      "text": "<system-reminder>\nA skill is a reusable set of task-specific instructions. The following skills are available in this session:\n\n<available_skills>\n- `banner-design`: Design banners for social media, ads, website heroes, creative assets, and print. Multiple art direction options with AI-generated visuals. Actions: design, create, generate banner. Platforms: Facebook, Twitter/X, LinkedIn, YouTube, Instagram, Google Display, website hero, print. Styles: minimalist, gradient, bold typography, photo-based, illustrated, geometric, retro, glassmorphism, 3D, neon, duotone, editorial, collage. Uses ui-ux-pro-max, frontend-design, ai-artist, ai-multimodal skills.\n- `brand`: Brand voice, visual identity, messaging frameworks, asset management, brand consistency. Activate for branded content, tone of voice, marketing assets, brand compliance, style guides.\n- `design`: Comprehensive design skill: brand identity, design tokens, UI styling, logo generation (55 styles, Gemini AI), corporate identity program (50 deliverables, CIP mockups), HTML presentations (Chart.js), banner design (22 styles, social/ads/web/print), icon design (15 styles, SVG, Gemini 3.1 Pro), social photos (HTML→screenshot, multi-platform). Actions: design logo, create CIP, generate mockups, build slides, design banner, generate icon, create social photos, social media images, brand identit...\n- `design-system`: Token architecture, component specifications, and slide generation. Three-layer tokens (primitive→semantic→component), CSS variables, spacing/typography scales, component specs, strategic slide creation. Use for design tokens, systematic design, brand-compliant presentations.\n- `diagnose-windows-sandbox-acl`: Use on Windows for unexpected DSH sandbox access denials: workspace writes or listing fail, or an ordinarily readable path cannot be read. One bundled command inspects the path and every ancestor and repairs the ACL problems it proves in that same run. Expected confinement denials need no ACL repair.\n- `slides`: Create strategic HTML presentations with Chart.js, design tokens, responsive layouts, copywriting formulas, and contextual slide strategies.\n- `ui-styling`: Create beautiful, accessible user interfaces with shadcn/ui components (built on Radix UI + Tailwind), Tailwind CSS utility-first styling, and canvas-based visual designs. Use when building user interfaces, implementing design systems, creating responsive layouts, adding accessible components (dialogs, dropdowns, forms, tables), customizing themes and colors, implementing dark mode, generating visual designs and posters, or establishing consistent styling patterns across applications.\n- `ui-ux-pro-max`: UI/UX design intelligence for web, mobile, and desktop. This skill should be used when designing, building, reviewing, or fixing interfaces, including pages, components, design systems, accessibility, interaction, responsive layout, typography, color, charts, and stack-specific UI implementation. Searchable local data: 79 searchable styles (50 active), 192 product palettes and reasoning profiles, 74 font pairings, 119 UX guidelines, 105 icons, 17 GSAP presets, 25 chart types, and 22 stacks.\n</available_skills>\n\nIf the user names a skill, or the task clearly matches a skill's description, call the `skill` tool with the exact skill name before taking task actions. Load all applicable skills, then follow their full instructions. This catalog contains summaries only; do not infer or follow a skill's instructions until it has been loaded.\nA user may also invoke a skill directly; its <skill_content> block then appears in this conversation. Follow it, and do not call the `skill` tool again for that skill.\n</system-reminder>",
+      "truncated": false
+    },
+    {
+      "seq": 16,
+      "time": 1792665002652,
+      "type": "tool/call",
+      "turn": 1,
+      "step": 1,
+      "callId": "call_00_YEYzIcBKyWMMqQd3TNef1325",
+      "name": "read",
+      "text": "{\"file_path\": \"D:\\\\@harness\\\\codex-dsh-native-p0\\\\.local\\\\ui-check-1792664983899\\\\workspace\\\\input.json\"}",
+      "truncated": false
+    },
+    {
+      "seq": 17,
+      "time": 1792665002692,
+      "type": "tool/result",
+      "turn": 1,
+      "step": 1,
+      "callId": "call_00_YEYzIcBKyWMMqQd3TNef1325",
+      "isError": false,
+      "text": "<path>D:\\@harness\\codex-dsh-native-p0\\.local\\ui-check-1792664983899\\workspace\\input.json</path>\n<type>file</type>\n<content>\n1: {\n2:   \"batch\": \"折纸-983900\",\n3:   \"items\": [\n4:     {\n5:       \"name\": \"甲\",\n6:       \"value\": 17\n7:     },\n8:     {\n9:       \"name\": \"乙\",\n10:       \"value\": 23\n11:     },\n12:     {\n13:       \"name\": \"丙\",\n14:       \"value\": 5\n15:     }\n16:   ]\n17: }\n\n(End of file - total 17 lines)\n</content>",
+      "truncated": false
+    },
+    {
+      "seq": 22,
+      "time": 1792665004705,
+      "type": "tool/call",
+      "turn": 1,
+      "step": 2,
+      "callId": "call_00_m42i7N92VdhWZmsRdsnA7550",
+      "name": "write",
+      "text": "{\"file_path\": \"D:\\\\@harness\\\\codex-dsh-native-p0\\\\.local\\\\ui-check-1792664983899\\\\workspace\\\\result.json\", \"content\": \"{\\n  \\\"batch\\\": \\\"折纸-983900\\\",\\n  \\\"count\\\": 3,\\n  \\\"total\\\": 45,\\n  \\\"average\\\": 15,\\n  \\\"largest\\\": \\\"乙\\\"\\n}\\n\"}",
+      "truncated": false
+    },
+    {
+      "seq": 23,
+      "time": 1792665004757,
+      "type": "tool/result",
+      "turn": 1,
+      "step": 2,
+      "callId": "call_00_m42i7N92VdhWZmsRdsnA7550",
+      "isError": false,
+      "text": "<path>D:\\@harness\\codex-dsh-native-p0\\.local\\ui-check-1792664983899\\workspace\\result.json</path>\n<type>file</type>\n<content>\nCreated file\n</content>",
+      "truncated": false
+    },
+    {
+      "seq": 28,
+      "time": 1792665006535,
+      "type": "tool/call",
+      "turn": 1,
+      "step": 3,
+      "callId": "call_00_ET_94KhIFaEA2n4UyI76nch0978",
+      "name": "read",
+      "text": "{\"file_path\": \"D:\\\\@harness\\\\codex-dsh-native-p0\\\\.local\\\\ui-check-1792664983899\\\\workspace\\\\result.json\"}",
+      "truncated": false
+    },
+    {
+      "seq": 29,
+      "time": 1792665006573,
+      "type": "tool/result",
+      "turn": 1,
+      "step": 3,
+      "callId": "call_00_ET_94KhIFaEA2n4UyI76nch0978",
+      "isError": false,
+      "text": "<path>D:\\@harness\\codex-dsh-native-p0\\.local\\ui-check-1792664983899\\workspace\\result.json</path>\n<type>file</type>\n<content>\n1: {\n2:   \"batch\": \"折纸-983900\",\n3:   \"count\": 3,\n4:   \"total\": 45,\n5:   \"average\": 15,\n6:   \"largest\": \"乙\"\n7: }\n\n(End of file - total 7 lines)\n</content>",
+      "truncated": false
+    },
+    {
+      "seq": 33,
+      "time": 1792665008711,
+      "type": "assistant/message",
+      "turn": 1,
+      "step": 4,
+      "text": "已写入 result.json：batch 为折纸-983900，count 为 3，total 为 45，average 为 15，largest 为乙；随后用原生 read 工具回读，确认字段与值一致，且无工具错误。",
+      "truncated": false
+    },
+    {
+      "seq": 35,
+      "time": 1792665008713,
+      "type": "turn/end",
+      "turn": 1,
+      "reason": "completed"
+    }
+  ]
+}
