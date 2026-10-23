@@ -18,7 +18,10 @@ export function visibleEvent(event) {
     const content = message.content?.filter(block => block.type === 'text').map(block => block.text).join('\n') ?? '';
     // Only visible message text. Never expose reasoning blocks or raw provider streams.
     if (!content) return null;
-    return { ...base, ...text(content) };
+    // Producer identity (user / runtime-context / skill-catalog) is visible
+    // metadata; the native trajectory classifies records by it.
+    const sourceKind = event.type === 'user/message' ? message.source?.kind ?? null : null;
+    return { ...base, ...(sourceKind ? { sourceKind } : {}), ...text(content) };
   }
   if (event.type === 'turn/start') return base;
   if (event.type === 'turn/end') return { ...base, reason: event.data.reason.kind };

@@ -2,7 +2,7 @@
   "label": "演示任务：读→写→命令失败→读回恢复",
   "session_id": "bc243aa7-57aa-47b5-b219-c73a6a45c5ed",
   "source": "native-dsh-session-log",
-  "extractedAt": "2026-10-23T11:34:38.867Z",
+  "extractedAt": "2026-10-23T12:04:01.587Z",
   "extractor": "scripts/extract-fixtures.mjs (production readNativeEvents)",
   "events": [
     {
@@ -15,6 +15,7 @@
       "seq": 8,
       "time": 1792663565549,
       "type": "user/message",
+      "sourceKind": "user",
       "text": "这是一次简短的真实桥接演示。使用原生文件工具读取工作区的 input.json，计算总订单数、总收入、整体客单价（总收入/总订单数，四舍五入到两位小数）及收入最高的一天。只创建两个文件：result.json（字段 batch,total_orders,total_revenue,average_order_value,top_day），summary.md（一段不超过120字的中文业务总结）。不要改 input.json，不要访问工作区外的文件，不要安装任何依赖。请记住 input.json 的 batch 和计算结果，下一轮会继续问你。最后用不超过100字报告结果与文件名。",
       "truncated": false
     },
@@ -22,6 +23,7 @@
       "seq": 9,
       "time": 1792663565551,
       "type": "user/message",
+      "sourceKind": "runtime-context",
       "text": "Current runtime context. This snapshot supersedes earlier runtime-context snapshots.\n\nCurrent working directory: \"D:\\\\@harness\\\\codex-dsh-native-p0\\\\.local\\\\demo-1792663550562\\\\workspace\".\n\nCurrent DSH file policy: workspace-write. Any available operation enforced by the DSH file sandbox may modify files under the session workspace: \"D:\\\\@harness\\\\codex-dsh-native-p0\\\\.local\\\\demo-1792663550562\\\\workspace\". Some platform temporary areas may also be writable.\n\nApproval policy: ask. Operations that require approval may ask through the configured answerers; without an available answerer, the request fails closed.",
       "truncated": false
     },
@@ -29,6 +31,7 @@
       "seq": 10,
       "time": 1792663565552,
       "type": "user/message",
+      "sourceKind": "skill-catalog",
       "text": "<system-reminder>\nA skill is a reusable set of task-specific instructions. The following skills are available in this session:\n\n<available_skills>\n- `banner-design`: Design banners for social media, ads, website heroes, creative assets, and print. Multiple art direction options with AI-generated visuals. Actions: design, create, generate banner. Platforms: Facebook, Twitter/X, LinkedIn, YouTube, Instagram, Google Display, website hero, print. Styles: minimalist, gradient, bold typography, photo-based, illustrated, geometric, retro, glassmorphism, 3D, neon, duotone, editorial, collage. Uses ui-ux-pro-max, frontend-design, ai-artist, ai-multimodal skills.\n- `brand`: Brand voice, visual identity, messaging frameworks, asset management, brand consistency. Activate for branded content, tone of voice, marketing assets, brand compliance, style guides.\n- `design`: Comprehensive design skill: brand identity, design tokens, UI styling, logo generation (55 styles, Gemini AI), corporate identity program (50 deliverables, CIP mockups), HTML presentations (Chart.js), banner design (22 styles, social/ads/web/print), icon design (15 styles, SVG, Gemini 3.1 Pro), social photos (HTML→screenshot, multi-platform). Actions: design logo, create CIP, generate mockups, build slides, design banner, generate icon, create social photos, social media images, brand identit...\n- `design-system`: Token architecture, component specifications, and slide generation. Three-layer tokens (primitive→semantic→component), CSS variables, spacing/typography scales, component specs, strategic slide creation. Use for design tokens, systematic design, brand-compliant presentations.\n- `diagnose-windows-sandbox-acl`: Use on Windows for unexpected DSH sandbox access denials: workspace writes or listing fail, or an ordinarily readable path cannot be read. One bundled command inspects the path and every ancestor and repairs the ACL problems it proves in that same run. Expected confinement denials need no ACL repair.\n- `slides`: Create strategic HTML presentations with Chart.js, design tokens, responsive layouts, copywriting formulas, and contextual slide strategies.\n- `ui-styling`: Create beautiful, accessible user interfaces with shadcn/ui components (built on Radix UI + Tailwind), Tailwind CSS utility-first styling, and canvas-based visual designs. Use when building user interfaces, implementing design systems, creating responsive layouts, adding accessible components (dialogs, dropdowns, forms, tables), customizing themes and colors, implementing dark mode, generating visual designs and posters, or establishing consistent styling patterns across applications.\n- `ui-ux-pro-max`: UI/UX design intelligence for web, mobile, and desktop. This skill should be used when designing, building, reviewing, or fixing interfaces, including pages, components, design systems, accessibility, interaction, responsive layout, typography, color, charts, and stack-specific UI implementation. Searchable local data: 79 searchable styles (50 active), 192 product palettes and reasoning profiles, 74 font pairings, 119 UX guidelines, 105 icons, 17 GSAP presets, 25 chart types, and 22 stacks.\n</available_skills>\n\nIf the user names a skill, or the task clearly matches a skill's description, call the `skill` tool with the exact skill name before taking task actions. Load all applicable skills, then follow their full instructions. This catalog contains summaries only; do not infer or follow a skill's instructions until it has been loaded.\nA user may also invoke a skill directly; its <skill_content> block then appears in this conversation. Follow it, and do not call the `skill` tool again for that skill.\n</system-reminder>",
       "truncated": false
     },

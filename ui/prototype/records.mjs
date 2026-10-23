@@ -18,7 +18,9 @@ export function buildLedger(events) {
   };
   const toRecord = event => {
     const base = { seq: event.seq, time: event.time, step: event.step };
-    if (event.type === 'user/message') return { ...base, kind: 'task', text: event.text ?? '', truncated: Boolean(event.truncated) };
+    if (event.type === 'user/message') {
+      return { ...base, kind: 'task', sourceKind: event.sourceKind ?? 'user', text: event.text ?? '', truncated: Boolean(event.truncated) };
+    }
     if (event.type === 'assistant/message') return { ...base, kind: 'message', text: event.text ?? '', truncated: Boolean(event.truncated) };
     return null;
   };
@@ -55,10 +57,28 @@ export function buildLedger(events) {
       record.state = !record.result ? 'pending' : record.result.isError ? 'error' : 'ok';
     }
   }
+  // Native semantics: a call still open when its turn closes becomes a
+  // synthetic interrupted error, never an eternal pending row.
+  for (const turn of turns) {
+    if (!turn.end) continue;
+    for (const record of turn.records) {
+      if (record.kind === 'tool' && record.state === 'pending') {
+        record.state = 'interrupted';
+        record.interruptedAt = { seq: turn.end.seq, time: turn.end.time };
+      }
+    }
+  }
   return { turns, stats: { events: events.length, turns: turns.length, tools, errors } };
 }
 
 export const TOOL_LABELS = { read: '读取', write: '写入', edit: '修改', pwsh: '执行命令' };
+// Producer labels follow the native trajectory: real prompts, context
+// injections and catalogs are different records, not one "收到任务".
+export const SOURCE_LABELS = { user: '收到任务', 'runtime-context': '上下文注入', 'skill-catalog': '技能目录' };
+
+export function taskTitle(record) {
+  return SOURCE_LABELS[record.sourceKind] ?? `输入 · ${record.sourceKind}`;
+}
 
 export function toolTitle(record) {
   if (record.orphan) return { label: '工具结果（未配对）', path: null };

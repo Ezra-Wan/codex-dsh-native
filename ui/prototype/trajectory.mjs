@@ -1,9 +1,9 @@
 // Minimal ledger renderer: native-style turn grouping, paired tool records,
 // error retention and tail following, on the existing card's CSS variables.
-import { buildLedger, toolTitle } from './records.mjs';
+import { buildLedger, taskTitle, toolTitle } from './records.mjs';
 
 const time = value => new Date(value).toLocaleTimeString('zh-CN', { hour12: false });
-const STATE_LABELS = { ok: '结果', error: '异常', pending: '等待结果' };
+const STATE_LABELS = { ok: '结果', error: '异常', pending: '等待结果', interrupted: '已中断' };
 
 function pre(text, truncated, extraClass = '') {
   const node = document.createElement('pre');
@@ -14,9 +14,10 @@ function pre(text, truncated, extraClass = '') {
 
 function renderRecord(record) {
   const li = document.createElement('li');
-  li.className = `record ${record.kind}${record.state === 'error' ? ' failed' : ''}${record.state === 'pending' ? ' waiting' : ''}`;
+  const failed = record.state === 'error' || record.state === 'interrupted';
+  li.className = `record ${record.kind}${failed ? ' failed' : ''}${record.state === 'pending' ? ' waiting' : ''}`;
   const details = document.createElement('details');
-  const openByDefault = record.kind !== 'tool' || record.state === 'error';
+  const openByDefault = record.kind !== 'tool' || failed;
   if (openByDefault) details.open = true;
   const summary = document.createElement('summary');
   const stamp = document.createElement('span');
@@ -27,7 +28,7 @@ function renderRecord(record) {
   const chip = document.createElement('span');
   chip.className = 'chip';
   if (record.kind === 'task') {
-    title.textContent = '收到任务';
+    title.textContent = taskTitle(record);
     chip.textContent = '输入';
   } else if (record.kind === 'message') {
     title.textContent = 'DS 回复';
