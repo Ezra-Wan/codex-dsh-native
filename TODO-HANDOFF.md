@@ -68,8 +68,9 @@
 
 - [x] 获取对应版本完整源码，先看 `ui-trajectory` / `ui-chat` 的 exports、依赖及 provider 契约，优先直接复用组件，保留升级路径。（2026-10-23：以 node_modules 内 0.2.1-rc.2 发布物为来源——exports 声明 `./src/*` 但 src 未随包发布；浏览器入口 `lib/client.js` 是 `window.__ModuleLoader__` 注册块，react 非独立 npm 包。结论：`docs/upstream-ui-reuse.md`。同日已稀疏检出上游源码到 `.local/reference/dsh-upstream`（pinned `687f282e`）并精读 trajectory/session-controller 实现，见 `docs/upstream-source-study.md`）
 - [x] 用已有真实记录做离线适配原型，先显示一段“读 → 写 → 校验失败 → 恢复”的轨迹，验证窄面板、暗色、折叠、错误、长结果和自动滚动。（2026-10-23：`ui/prototype/`，`npm run prototype` 后访问 127.0.0.1:8791；真实 fixture 由生产 `readNativeEvents` 提取（demo 会话含 pwsh 失败+读回恢复，ui-check 会话读→写→校验通过），另有标注合成的长结果压力样本。截图证据 `.local/prototype-evidence-20261023/`，验收记录 `review/acceptance.json`，测试 18/18）
-- [x] 外观按 DSH 真实设计重做（2026-10-23 应用户要求）：设计令牌取自 `dsh-client-ui-theme`（403 个 `--dsw` 变量，亮/暗两套），组件几何取自上游 `TrajectoryCell/TurnHeader.module.css`（38px 行、彩色类型标签、粘性回合栏、880px 车道）；用户/上下文/技能/回复/工具/异常彩色标签。仅保留必要控件，删全部开发提示；主题跟随系统。证据 06-09 截图。
-- [ ] 对照原生界面截图/实际操作后再称为视觉一致。不能只换 CSS 或做打字动画就声称原生能力一致。（外观已用 DSH 自身令牌与几何实现，仍无与原生界面的并排对照截图）
+- [x] 外观按 DSH 真实设计重做（2026-10-23 应用户要求）：设计令牌取自 `dsh-client-ui-theme`（403 个 `--dsw` 变量，亮/暗两套），组件几何取自上游 `TrajectoryCell/TurnHeader.module.css`；用户/上下文/技能/回复/工具/异常彩色标签。仅保留必要控件，删全部开发提示；主题跟随系统。
+- [x] 版式改为无界对话形式（2026-10-23 用户反馈：偏好对话视图而非轨迹卡片，附原生亮/暗截图）：渲染层按 `ui-chat` 源码重做——用户右气泡（`MessageItem` bubble 规格）、过程行发丝线分隔无卡片（`TurnProcessNodeView`）、回合折叠为「已完成，用时 N」状态行、助手文本自由流式。证据截图 06-11，验收记录 `.local/prototype-evidence-20261023/review/acceptance.json`（rounds 结构）。**后续接入 `ds_observe` 卡片时应沿用这一无界对话版式，不再用卡片账本。**
+- [ ] 对照原生界面截图/实际操作后再称为视觉一致。不能只换 CSS 或做打字动画就声称原生能力一致。（版式与令牌均来自上游源码，仍无与原生界面的并排对照截图）
 - [x] 若组件必须依赖完整客户端，简短比较三条路：官方组件+薄适配；原生 Web 整体嵌入；按许可移植最小展示组件。记录依赖、维护与会话归属成本，再选最小可行方案。（2026-10-23：P0 选 C 并记录 A/B 的推迟理由，见 `docs/upstream-ui-reuse.md`）
 - 整体嵌入原生 Web 需处理连接、认证、iframe/CSP、工作区与运行时归属；不能假定另开 Web 实例就能控制 SDK 正在运行的同一个会话。不要把凭据放入 UI 工具结果或持久化页面。
 - 验收：复用来源可追踪、没有重写模型循环、真实记录显示完整、Codex 内实际可见。（前三项 2026-10-23 已满足：NOTICE.md 记录来源、只消费 ds_events 同源可见事件、离线回放完整显示；最后一项待把原型接入 `ds_observe` 卡片后在宿主内验收）
