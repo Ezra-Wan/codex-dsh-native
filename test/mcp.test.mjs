@@ -22,6 +22,11 @@ test('MCP initialization, tools and switch work over real stdio without model ca
     assert.deepEqual(tools.map(tool => tool.name).sort(), ['ds_bridge', 'ds_events', 'ds_followup', 'ds_observe', 'ds_panel', 'ds_start', 'ds_stop', 'ds_wait']);
     const panel = tools.find(tool => tool.name === 'ds_panel');
     assert.deepEqual(panel._meta['openai/ui'].entrypoints, [{ type: 'thread' }]);
+    // P0-A single entry: the dispatch call itself carries the task card.
+    const start = tools.find(tool => tool.name === 'ds_start');
+    assert.equal(start._meta.ui.resourceUri, 'ui://dsh-native/observer.html');
+    const wait = tools.find(tool => tool.name === 'ds_wait');
+    assert.deepEqual(wait._meta.ui.visibility, ['model', 'app']);
     const resource = await client.readResource({ uri: panel._meta.ui.resourceUri });
     assert.equal(resource.contents[0].mimeType, 'text/html;profile=mcp-app');
     assert.match(resource.contents[0].text, /执行记录/);
