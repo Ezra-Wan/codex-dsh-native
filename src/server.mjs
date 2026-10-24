@@ -14,7 +14,7 @@ if (arg) {
   else throw new Error('Use --enable, --disable, --status, or no argument for MCP stdio.');
 } else {
   const server = new McpServer({ name: 'codex-dsh-native-p0', version: '0.1.1' }, {
-    instructions: 'Optional native DSH bridge. Caller chooses light or coding per task. After ds_start, retain agent_id and continue independent work in parallel. For serial/foreground tasks, call ds_observe once to request an inline trace on MCP Apps hosts; do not repeatedly remount the view. ds_panel is an optional user-opened parallel-task entrypoint, not proof of a native Codex subagent sidebar. Never claim host rendering is working without observing it. Call ds_wait only when results are needed. A timeout means pending, not completion. There is no native Codex desktop wakeup callback in P0; do not end the parent task with uncollected work. Use ds_followup for the same task/session. Do not duplicate a task in both agents. Assign exclusive files or separate worktrees to concurrent writers, including yourself. Native DSH SDK manages context and compaction; summaries returned here do not replace native history. Inspect warnings, output and actual artifacts before accepting completion. Token caps are per model request, not total task cost. Single-entry discipline: ds_start is the one user-visible entry per task (it renders the task card); collection (ds_wait) and observation run through that card or as model-internal calls — do not emit extra observe/panel calls per task just to show progress.',
+    instructions: 'Optional native DSH bridge. Caller chooses light or coding per task. After ds_start, retain agent_id and continue independent work in parallel; the dispatch call itself renders the task card, which is the single user-visible entry tracking this task. Do not emit extra observe/panel calls to show progress — observation belongs to the card (and ds_panel only when the user asks for a persistent side entry). ds_observe is only for attaching a card to a task dispatched before this card-bearing flow. Collect with ds_wait only when results are needed; a timeout means pending, not completion. There is no native Codex desktop wakeup callback in P0; do not end the parent task with uncollected work. Use ds_followup for the same task/session. Do not duplicate a task in both agents. Assign exclusive files or separate worktrees to concurrent writers, including yourself. Native DSH SDK manages context and compaction; summaries returned here do not replace native history. Inspect warnings, output and actual artifacts before accepting completion. Token caps are per model request, not total task cost.',
   });
   const add = (name, description, inputSchema, handler, presentation = {}) => server.registerTool(name, { description, inputSchema, ...presentation }, async args => {
     try {
@@ -65,11 +65,7 @@ if (arg) {
   add('ds_wait', 'Collect compact progress, actual recent actions, warnings or a bounded final answer. Returns as soon as a fresh native event arrives (event-driven bounded wait), at the timeout, or at completion. Running remains pending. completed_with_warnings means native tool failures occurred and must be inspected using ds_events. Full final text is in resultPath. failed/interrupted is not success.', {
     agent_id: agent,
     timeoutMs: z.number().int().min(0).max(50000).default(50000),
-  }, ({ agent_id, timeoutMs }) => bridge.wait(agent_id, timeoutMs), {
-    // Model protocol + callable from the task card; never a second
-    // user-visible entry alongside the ds_start card (P0-A).
-    _meta: { ui: { visibility: ['model', 'app'] } },
-  });
+  }, ({ agent_id, timeoutMs }) => bridge.wait(agent_id, timeoutMs));
   add('ds_stop', 'Interrupt this bridge task by closing its dedicated SDK runtime. Native history remains resumable; filesystem edits are not rolled back. Other bridge tasks continue.', {
     agent_id: agent,
   }, ({ agent_id }) => bridge.stop(agent_id));
