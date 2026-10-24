@@ -40,6 +40,21 @@ export function createCard({ app, doc = globalThis.document }) {
     visible: () => !doc.hidden,
   });
 
+  // The selected task's own executing-process UI (S2 binding): each web-embed
+  // task serves the official UI from ITS OWN process, so switching tasks is
+  // switching URLs — click A shows A, switch B shows B, no shared state to
+  // cross. Falls back to the global native-replay URL, then the fallback panel.
+  function applyTaskBinding() {
+    if (!selected) return false;
+    const status = tasks.find(task => task.agent_id === selected);
+    const url = status?.nativeUrl ?? null;
+    if (url) {
+      mountOfficial(url);
+      return true;
+    }
+    return false;
+  }
+
   function renderFallback(message) {
     $('frame').style.display = 'none';
     $('fallback').style.display = 'block';
@@ -107,6 +122,9 @@ export function createCard({ app, doc = globalThis.document }) {
       // or mark it terminal so the paced loop parks in slow watch.
       const status = items.find(item => item.agent_id === selected);
       if (status) core.observeStatus(status);
+      // Prefer this task's own executing-process UI; the nativeReplay field
+      // below only decides when the task carries no per-task URL.
+      if (applyTaskBinding()) return;
     }
     // Layout authority is the nativeReplay field ONLY: a bare task summary
     // (ds_observe / ds_wait) carries no replay state and must not flip the
@@ -125,10 +143,9 @@ export function createCard({ app, doc = globalThis.document }) {
     core.switchTask();
     $('state').textContent = '';
     $('state').removeAttribute('title');
-    // The official app ignores the hash today (no deep-link support): this is
-    // a reserved channel, NOT a working session binding — see TODO-HANDOFF.
-    const frame = $('frame');
-    if (frame.dataset.mounted && selected) frame.src = `${frame.dataset.mounted}#session=${selected}`;
+    // Bind the embed to the newly selected task's own executing-process UI
+    // (per-task URL — the receiving side is this task's official web stack).
+    applyTaskBinding();
   });
 
   async function start() {

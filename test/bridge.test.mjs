@@ -12,7 +12,7 @@ function factory() {
     histories, instances,
     create(record, options = {}) {
       const runtime = {
-        closed: false, resumed: false, patches: options.patches ?? [], record,
+        closed: false, resumed: false, patches: options.patches ?? [], options, record,
         start: async () => {},
         session: id => ({ getWorkingDirectory: async () => { histories.set(id, []); return record.cwd; } }),
         resumeSession: async id => {
@@ -199,7 +199,7 @@ test('a recovered tool failure stays visible after final completion and reload',
 test('subagent tasks mount the official delegation patch and record role', async t => {
   const { root, bridge, fake } = await setup(t);
   await bridge.setEnabled(true);
-  const task = await bridge.start({ cwd: root, task: 'delegate docs', subagents: true, role: 'sub', name: '[X·sub] docs' });
+  const task = await bridge.start({ cwd: root, task: 'delegate docs', subagents: true, role: 'sub', name: '[X·sub] docs', webEmbed: false });
   const runtime = await ready(fake);
   assert.equal(runtime.patches.length, 1);
   const patch = await readFile(runtime.patches[0], 'utf8');
@@ -214,7 +214,7 @@ test('subagent tasks mount the official delegation patch and record role', async
 test('plain tasks stay on the unpatched profile', async t => {
   const { root, bridge, fake } = await setup(t);
   await bridge.setEnabled(true);
-  await bridge.start({ cwd: root, task: 'plain', permission: 'read-only' });
+  await bridge.start({ cwd: root, task: 'plain', permission: 'read-only', webEmbed: false });
   const runtime = await ready(fake);
   assert.deepEqual(runtime.patches, []);
   runtime.finish();

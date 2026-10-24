@@ -1,0 +1,11 @@
+{
+  "name": "@codex-dsh/web-embed",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "lib/index.js",
+  "description": "Bridge-owned thin adapter inside the executing DSH runtime: writes the authenticated official-UI URL of this process to a file so the bridge can embed it (S1 stream link). No UI, model, or protocol logic.",
+  "dependencies": {
+    "@deepseek-ai/cordis": "4.0.5"
+  }
+}

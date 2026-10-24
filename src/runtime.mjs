@@ -22,6 +22,27 @@ export async function writeSubagentPatch(root) {
   return path;
 }
 
+// Per-task overlay for the sdk-web profile: pins this task's webserver port
+// and mounts @codex-dsh/web-embed with the bridge-owned URL file it writes.
+export async function writeWebEmbedPatch(root, { port, urlFile }) {
+  const dir = join(root, 'patches');
+  await mkdir(dir, { recursive: true });
+  const path = join(dir, `web-embed-${port}.yaml`);
+  const yaml = [
+    `- id: webserver`,
+    `  config:`,
+    `    host: 127.0.0.1`,
+    `    port: ${port}`,
+    `- insert:`,
+    `  - id: codex-web-embed`,
+    `    name: '@codex-dsh/web-embed'`,
+    `    config:`,
+    `      urlFile: ${JSON.stringify(urlFile)}`,
+  ].join('\n') + '\n';
+  await writeFile(path, yaml, 'utf8');
+  return path;
+}
+
 class NativeRuntime extends DeepSeekHarness {
   async run(task, { sessionId, onNotification }) {
     // The SDK's task-level wait includes native descendants and their summary
@@ -63,10 +84,10 @@ class NativeRuntime extends DeepSeekHarness {
 
 // The official SDK owns process lifetime, native history, tools and compaction.
 // The bridge never rebuilds a model prompt from a transcript.
-export function createRuntime(record, { home, patches = [] }) {
+export function createRuntime(record, { home, patches = [], profile = 'sdk' }) {
   return new NativeRuntime({
     dshHome: home,
-    profile: 'sdk',
+    profile,
     patches,
     cwd: record.cwd,
     processCwd: record.cwd,

@@ -3,7 +3,7 @@ import { isAbsolute, join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { createRuntime, writeSubagentPatch } from './runtime.mjs';
+import { createRuntime, writeSubagentPatch, writeWebEmbedPatch } from './runtime.mjs';
 import { visibleEvent, readNativeEvents } from './trace.mjs';
 
 export const MODES = Object.freeze({
@@ -34,7 +34,7 @@ function alive(pid) {
 }
 
 export class Bridge {
-  constructor({ root, runtimeFactory = createRuntime, idleMs = 120_000, maxParallel = 2, patches = [] }) {
+  constructor({ root, runtimeFactory = createRuntime, idleMs = 120_000, maxParallel = 2, patches = [], webEmbedBasePort = 8800 }) {
     this.root = resolve(root);
     this.home = join(this.root, 'dsh-home');
     this.tasks = join(this.root, 'tasks');
@@ -42,15 +42,25 @@ export class Bridge {
     this.idleMs = idleMs;
     this.maxParallel = maxParallel;
     this.patches = patches;
+    this.webEmbedBasePort = webEmbedBasePort;
     this.live = new Map();
     this.admission = Promise.resolve();
     this.closing = false;
+    this.portCursor = 0;
   }
 
   async init() {
     await mkdir(this.tasks, { recursive: true });
     await mkdir(this.home, { recursive: true });
+    await mkdir(join(this.root, 'task-urls'), { recursive: true });
     return this;
+  }
+
+  // Each web-embed task owns one loopback port; allocation is deterministic
+  // from the base and skips ports already handed out in this process.
+  nextWebPort() {
+    this.portCursor += 1;
+    return this.webEmbedBasePort + this.portCursor;
   }
 
   path(id) {
@@ -94,7 +104,7 @@ export class Bridge {
     return result;
   }
 
-  async start({ task, cwd, mode = 'light', name = '', model = 'deepseek-v4-flash', provider = 'deepseek-official', maxTokens, effort, permission = 'workspace-write', subagents = false, role = 'peer', backend = 'native' }) {
+  async start({ task, cwd, mode = 'light', name = '', model = 'deepseek-v4-flash', provider = 'deepseek-official', maxTokens, effort, permission = 'workspace-write', subagents = false, role = 'peer', backend = 'native', webEmbed = true }) {
     return this.admit(async () => {
       if (!isAbsolute(cwd) || !(await stat(cwd)).isDirectory()) throw new Error('cwd must be an existing absolute directory');
       if (!MODES[mode]) throw new Error('mode must be light or coding');
@@ -114,11 +124,31 @@ export class Bridge {
       const id = randomUUID();
       const record = {
         agent_id: id, session_id: id, name, cwd: resolve(cwd), mode, model, provider,
-        maxTokens: cap, effort, permission, subagents, role, backend: 'native', returnChars: MODES[mode].returnChars,
+        maxTokens: cap, effort, permission, subagents, role, backend: 'native',
+        ...(webEmbed ? { webEmbed: true, webPort: this.nextWebPort() } : {}),
+        returnChars: MODES[mode].returnChars,
         status: 'new', turn: 0, createdAt: new Date().toISOString(), persisted: false,
       };
       return this.launch(record, task);
     });
+  }
+
+  // Poll the adapter-written URL file (local read only; no model, no service
+  // started by the bridge). A timeout degrades the card to the fallback and
+  // never fails the task itself.
+  async awaitWebUrl(entry, timeoutMs = 20_000) {
+    const record = entry.record;
+    for (let count = 0; count < timeoutMs / 500 && !record.nativeUrl; count++) {
+      const state = await readFile(record.webUrlFile, 'utf8').then(JSON.parse).catch(() => null);
+      if (state?.url) {
+        record.nativeUrl = state.url;
+        record.updatedAt = new Date().toISOString();
+        await this.save(record).catch(() => {});
+        return;
+      }
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+    record.progress.webEmbedMissed = record.webUrlFile;
   }
 
   async followup(id, task) {
@@ -200,11 +230,18 @@ export class Bridge {
     const record = entry.record;
     try {
       if (!entry.runtime) {
-        // Subagent tasks add the official delegation patch below global ones.
-        const patches = record.subagents
-          ? [...this.patches, await writeSubagentPatch(this.root)]
-          : this.patches;
-        entry.runtime = this.runtimeFactory(record, { home: this.home, patches });
+        // Subagent tasks add the official delegation patch below global ones;
+        // web-embed tasks add the per-task webserver port + URL-file adapter
+        // on the sdk-web profile (official UI in THIS process → native stream).
+        let patches = this.patches;
+        if (record.subagents) patches = [...patches, await writeSubagentPatch(this.root)];
+        if (record.webEmbed) {
+          const urlFile = join(this.root, 'task-urls', `${record.webPort}.json`);
+          await rm(urlFile, { force: true });
+          patches = [...patches, await writeWebEmbedPatch(this.root, { port: record.webPort, urlFile })];
+          record.webUrlFile = urlFile;
+        }
+        entry.runtime = this.runtimeFactory(record, { home: this.home, patches, ...(record.webEmbed ? { profile: 'sdk-web' } : {}) });
         await entry.runtime.start();
         if (record.persisted) await entry.runtime.resumeSession(record.session_id);
         else {
@@ -220,6 +257,9 @@ export class Bridge {
       // after the awaited save, and keep a just-created run promise reachable
       // for interruption instead of outliving the closer's runtime.close().
       if (entry.cancel) throw new Error('Interrupted before prompt');
+      // The in-process adapter writes the authenticated official-UI URL once
+      // the web stack is live; pick it up without blocking the prompt.
+      if (record.webEmbed && !record.nativeUrl) void this.awaitWebUrl(entry);
       const runPromise = entry.runtime.run(task, {
         sessionId: record.session_id,
         onNotification: notification => {
@@ -310,7 +350,7 @@ export class Bridge {
     const { agent_id, session_id, name, mode, model, maxTokens, permission, cwd, turn, status, progress, error, resultPath, finishReason, usage } = record;
     const final = (record.final ?? '').slice(0, record.returnChars);
     const children = Object.entries(record.children ?? {}).map(([child_id, info]) => ({ child_id, ...info }));
-    return { agent_id, session_id, name, role: record.role ?? 'peer', backend: record.backend ?? 'native', ...(record.subagents ? { subagents: true } : {}), mode, model, maxTokens, permission, cwd, turn, status, progress,
+    return { agent_id, session_id, name, role: record.role ?? 'peer', backend: record.backend ?? 'native', ...(record.subagents ? { subagents: true } : {}), ...(record.nativeUrl ? { nativeUrl: record.nativeUrl } : {}), mode, model, maxTokens, permission, cwd, turn, status, progress,
       ...(children.length ? { children } : {}),
       ...(record.userTakeover ? { userTakeover: record.userTakeover } : {}),
       error,
@@ -423,6 +463,7 @@ export class Bridge {
       entry.record.lastSelfWriteAt = Date.now();
       await this.save(entry.record).catch(() => {});
     }
+    if (entry.record.webUrlFile) await rm(entry.record.webUrlFile, { force: true }).catch(() => {});
     await entry.release();
     this.live.delete(id);
   }

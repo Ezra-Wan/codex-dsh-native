@@ -46,6 +46,7 @@ if (arg) {
     role: z.enum(['sub', 'peer']).default('peer'),
     subagents: z.boolean().default(false),
     backend: z.enum(['native', 'worker']).default('native'),
+    webEmbed: z.boolean().default(true),
     permission: z.enum(['read-only', 'workspace-write']).default('workspace-write'),
     model: z.string().optional(),
     provider: z.string().optional(),
