@@ -1,6 +1,6 @@
 # 下一模型交接：Codex 内可观察的原生 DSH 协作
 
-更新：2026-10-23，Asia/Shanghai。2026-10-23 增量：完成优先项 2 的离线部分（上游 UI 契约研究、三路比较、真实记录回放原型及界面验收），全程零模型调用；仓库已按 feature 分支流程建立 git 历史。以下未勾选项供后续执行。
+更新：2026-10-24，Asia/Shanghai。**主展示链路已按验收方向重构**：observer 卡片改为官方 Web 原实现的容器适配层（iframe + 降级面板；MCP server 启动自动拉起 native-replay，`ds_bridge` 返回 `nativeReplay.url`）；`ui/prototype/` 自写渲染降级为参考样例，不在主链路。同时修复验收报告四缺陷（markdown 栈溢出、运行中子会话 ds_events、接管探测目录层级、第二轮 takeover 漏报），回归测试 `test/review-regression.test.mjs`。**重要实测发现：ZCode 内嵌浏览器本身就是 MCP Apps 宿主**（容器卡片在本地 IAB 中拿到了真实 ds_bridge 数据）——宿主能力不再是假设，iframe 嵌入待新 server 重载后实测。
 
 ## 目标与工作边界
 

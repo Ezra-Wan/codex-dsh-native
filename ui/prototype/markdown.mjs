@@ -7,6 +7,12 @@ import { gfmFromMarkdown } from 'mdast-util-gfm';
 import { gfm } from 'micromark-extension-gfm';
 
 function inline(parent, node) {
+  // Wrapped children (strong/emphasis/del/link use 'chain'); iterate them
+  // instead of re-wrapping, or recursion never reaches the leaves.
+  if (node.type === 'chain') {
+    for (const child of node.children ?? []) inline(parent, child);
+    return;
+  }
   if (node.type === 'text') { parent.append(document.createTextNode(node.value)); return; }
   if (node.type === 'inlineCode') { const el = document.createElement('code'); el.textContent = node.value; parent.append(el); return; }
   if (node.type === 'strong') { const el = document.createElement('strong'); inline(el, { type: 'chain', children: node.children }); parent.append(el); return; }

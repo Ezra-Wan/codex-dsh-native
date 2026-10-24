@@ -69,12 +69,12 @@ if (arg) {
   }, ({ agent_id, after_seq, limit }) => bridge.events(agent_id, after_seq, limit), {
     annotations: { readOnlyHint: true }, _meta: { ui: { visibility: ['model', 'app'] } },
   });
-  add('ds_observe', 'Show one DSH task execution trace inline in the conversation, if this host supports MCP Apps. Use after ds_start for serial/foreground delegation. The view reads native events directly without an LLM narrating them. UI host rendering remains to be confirmed on this installation.', {
+  add('ds_observe', 'Show one DSH task in the conversation: the card is a container for the OFFICIAL native web UI (same implementation as the desktop app), embedding it via the local native-replay adapter. The fallback panel lists tasks and status when embedding is unavailable. The view itself reads official session storage; it never calls the model.', {
     agent_id: agent,
   }, ({ agent_id }) => bridge.status(agent_id), {
     title: '查看 DS 执行过程', annotations: { readOnlyHint: true }, _meta: { ui: { resourceUri } },
   });
-  add('ds_panel', 'Open the DSH observer as an optional conversation side-panel entrypoint on compatible hosts. Select a task to inspect native actions and failures. Lists local bridge tasks, not a verified per-chat ownership filter. UI placement depends on host support.', {}, () => bridge.list(), {
+  add('ds_panel', 'Open the DSH observer as an optional conversation side-panel entrypoint on compatible hosts. Same official-UI container as ds_observe: select a task for status, children and takeover hints; the embedded native UI owns all conversation rendering. UI placement depends on host support.', {}, () => bridge.list(), {
     title: 'DS 并行任务', annotations: { readOnlyHint: true },
     _meta: { ui: { resourceUri }, 'openai/ui': { entrypoints: [{ type: 'thread' }] } },
   });
@@ -90,4 +90,7 @@ if (arg) {
   process.once('SIGTERM', () => { void close().catch(() => { process.exitCode = 1; }); });
   process.stdin.once('end', () => { void close().catch(() => { process.exitCode = 1; }); });
   await server.connect(new StdioServerTransport());
+  // The observer card embeds the official web UI; boot it out-of-band so the
+  // first open is ready. Failure only degrades the card to its fallback.
+  bridge.ensureNativeReplay().catch(() => {});
 }

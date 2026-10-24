@@ -260,9 +260,9 @@ test('followup refuses while the session log shows fresh external writes', async
   const task = await bridge.start({ cwd: root, task: 'first' });
   (await ready(fake)).finish();
   await bridge.wait(task.agent_id);
-  const sessionDir = join(bridge.home, 'sessions', `--w-${task.session_id}--`);
+  const sessionDir = join(bridge.home, 'sessions', '--D-workspace--', task.session_id);
   await mkdir(sessionDir, { recursive: true });
-  const logPath = join(sessionDir, 'session.jsonl');
+  const logPath = join(sessionDir, 'session.v4.jsonl.zstd');
   await writeFile(logPath, '{}\n');
   const fresh = new Date(Date.now() - 5_000);
   await utimes(logPath, fresh, fresh);

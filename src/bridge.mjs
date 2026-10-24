@@ -1,6 +1,8 @@
 import { mkdir, readFile, writeFile, rename, stat, readdir, rm } from 'node:fs/promises';
 import { isAbsolute, join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
+import { spawn } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { createRuntime, writeSubagentPatch } from './runtime.mjs';
 import { visibleEvent, readNativeEvents } from './trace.mjs';
 
@@ -123,16 +125,17 @@ export class Bridge {
 
   // A peer the user drives in the native web UI keeps writing its session log.
   // Refuse to resume while that log is hot so two drivers never interleave.
+  // Real layout: sessions/<workspace-dir>/<session-id>/<log files>.
   async assertSessionQuiet(record, windowMs = 120_000) {
     if (!record.persisted) return;
-    const logDir = join(this.home, 'sessions');
-    const names = await readdir(logDir).catch(() => []);
-    const marker = record.session_id;
-    for (const name of names) {
-      if (!name.includes(marker)) continue;
-      const entries = await readdir(join(logDir, name)).catch(() => []);
+    const sessionsRoot = join(this.home, 'sessions');
+    for (const workspace of await readdir(sessionsRoot).catch(() => [])) {
+      const workspaceDir = join(sessionsRoot, workspace);
+      const sessionDir = join(workspaceDir, record.session_id);
+      const entries = await readdir(sessionDir).catch(() => []);
+      if (!entries.length) continue;
       for (const entry of entries) {
-        const info = await stat(join(logDir, name, entry)).catch(() => null);
+        const info = await stat(join(sessionDir, entry)).catch(() => null);
         if (info?.isFile() && Date.now() - info.mtimeMs < windowMs) {
           throw new Error('Session log shows writes within the last 2 minutes; the user side may be driving this peer. Retry after it goes quiet.');
         }
@@ -164,7 +167,7 @@ export class Bridge {
     entry.cancel = false;
     Object.assign(record, {
       status: 'starting', turn: record.turn + 1, updatedAt: new Date().toISOString(),
-      error: null, final: '', finishReason: null, usage: null, progress: { eventCount: 0, userPrompts: 0 }, warnings: [], recentActions: [],
+      error: null, final: '', finishReason: null, usage: null, progress: { eventCount: 0 }, warnings: [], recentActions: [],
       children: {}, userTakeover: null,
     });
     try { await this.save(record); }
@@ -228,8 +231,9 @@ export class Bridge {
           const action = visibleEvent(event);
           // Bridge prompts exactly one kind=user message per turn (runtime.run);
           // extras beyond record.turn are the user driving this peer elsewhere.
+          // record.userPrompts accumulates across turns; record.turn likewise.
           if (event.type === 'user/message' && action?.sourceKind === 'user') {
-            record.progress.userPrompts = (record.progress.userPrompts ?? 0) + 1;
+            record.userPrompts = (record.userPrompts ?? 0) + 1;
           }
           if (action) {
             record.recentActions.push(action);
@@ -245,7 +249,7 @@ export class Bridge {
         entry.interrupt = () => reject(new Error('Interrupted by stop'));
       })]);
       record.final = result.finalResponse;
-      const extraUserPrompts = (record.progress.userPrompts ?? 0) - record.turn;
+      const extraUserPrompts = (record.userPrompts ?? 0) - record.turn;
       if (extraUserPrompts > 0) {
         record.userTakeover = { events: extraUserPrompts, lastAt: record.progress.lastActivityAt, hint: 'User drove this peer outside the bridge; read the session tail before continuing.' };
       }
@@ -299,8 +303,18 @@ export class Bridge {
   }
 
   async events(id, afterSeq = -1, limit = 30) {
+    const live = this.live.get(id)?.record;
+    if (live) {
+      if (!live.persisted) return { session_id: live.session_id, source: 'native-dsh-session-log', events: [], cursor: afterSeq, hasMore: false };
+      return readNativeEvents(this.home, live.session_id, afterSeq, limit);
+    }
+    // Children are readable while their parent task still runs: the in-memory
+    // children index covers records not yet persisted to the task file.
+    for (const entry of this.live.values()) {
+      if (entry.record.children && id in entry.record.children) return readNativeEvents(this.home, id, afterSeq, limit);
+    }
     try {
-      const record = this.live.get(id)?.record ?? await this.read(id);
+      const record = await this.read(id);
       if (!record.persisted) return { session_id: record.session_id, source: 'native-dsh-session-log', events: [], cursor: afterSeq, hasMore: false };
       return readNativeEvents(this.home, record.session_id, afterSeq, limit);
     } catch (error) {
@@ -378,7 +392,36 @@ export class Bridge {
   async list() {
     const names = (await readdir(this.tasks)).filter(name => ID.test(name.replace(/\.json$/, '')) && name.endsWith('.json'));
     const items = await Promise.all(names.map(name => this.status(name.slice(0, -5))));
-    return { ...(await this.config()), maxParallel: this.maxParallel, items };
+    return { ...(await this.config()), maxParallel: this.maxParallel, nativeReplay: await this.nativeReplay(), items };
+  }
+
+  // The native web UI adapter state (scripts/native-replay.mjs writes it).
+  // Returns { url, running } or null when the official UI is not up.
+  async nativeReplay() {
+    const state = await readFile(join(this.root, 'native-replay.json'), 'utf8').then(JSON.parse).catch(() => null);
+    if (!state?.url || !Number.isInteger(state.pid)) return null;
+    let running = false;
+    try { process.kill(state.pid, 0); running = true; }
+    catch (error) { running = error.code !== 'ESRCH'; }
+    return running ? { url: state.url, port: state.port } : { url: state.url, port: state.port, running: false };
+  }
+
+  // Boot the official web UI adapter if it is not already running. The
+  // observer card embeds its URL; failures degrade to the fallback panel.
+  async ensureNativeReplay() {
+    const current = await this.nativeReplay();
+    if (current?.running !== false && current) return current;
+    const script = fileURLToPath(new URL('../scripts/native-replay.mjs', import.meta.url));
+    const child = spawn(process.execPath, [script], { detached: true, stdio: 'ignore', windowsHide: true });
+    child.unref();
+    const statePath = join(this.root, 'native-replay.json');
+    for (let count = 0; count < 40; count++) {
+      await new Promise(resolve => setTimeout(resolve, 300));
+      const state = await readFile(statePath, 'utf8').then(JSON.parse).catch(() => null);
+      if (state?.pid !== child.pid && state?.url) return this.nativeReplay();
+      if (state?.pid === child.pid && state?.url) return this.nativeReplay();
+    }
+    throw new Error('native-replay did not report a URL within 12 seconds');
   }
 
   async close() {
