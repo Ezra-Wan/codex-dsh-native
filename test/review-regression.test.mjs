@@ -152,6 +152,7 @@ test('the native URL is generation-scoped: release revokes it, cold followup re-
   const { root, fake, bridge } = await setup(t, { webEmbedBasePort: 8850 });
   await bridge.setEnabled(true);
   const task = await bridge.start({ cwd: root, task: 'two generations', permission: 'read-only' });
+  await ready(fake);
   const urlFile = join(bridge.root, 'task-urls', '8851.json');
   await mkdir(join(bridge.root, 'task-urls'), { recursive: true });
   const writeUrl = token => writeFile(urlFile, JSON.stringify({ url: `http://127.0.0.1:8851/?token=${token}`, pid: 1, writtenAt: new Date().toISOString() }));
@@ -167,6 +168,8 @@ test('the native URL is generation-scoped: release revokes it, cold followup re-
   // Cold followup rebuilds the runtime; its launch clears the URL file first,
   // so the new generation's adapter writes the new token afterwards.
   await bridge.followup(task.agent_id, 'continue');
+  await ready(fake, 1);
+  await assert.rejects(readFile(urlFile, 'utf8'), { code: 'ENOENT' }, 'new runtime clears the previous URL before the adapter announces');
   await writeUrl('gen2');
   for (let i = 0; i < 40 && (await bridge.status(task.agent_id)).nativeUrl !== 'http://127.0.0.1:8851/?token=gen2'; i++) {
     await new Promise(r => setTimeout(r, 100));
