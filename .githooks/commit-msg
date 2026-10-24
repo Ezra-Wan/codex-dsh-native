@@ -1,0 +1,9 @@
+#!/bin/sh
+# commit-msg: enforce "type[(scope)]: subject" per docs/git-workflow.md.
+msg=$(head -1 "$1")
+pattern='^(feat|fix|docs|test|chore|refactor|perf|merge)(\([^)]+\))?: .+'
+echo "$msg" | grep -qE "$pattern" || {
+  echo "commit message must match: ${pattern}" >&2
+  echo "e.g. fix(bridge): 外部活动保护区分自身写入" >&2
+  exit 1
+}
