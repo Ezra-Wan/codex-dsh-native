@@ -161,7 +161,7 @@ test('stop closes only the requested task and a busy followup is rejected', asyn
 test('another bridge instance cannot write an owned native session', async t => {
   const { root, bridge, fake } = await setup(t);
   await bridge.setEnabled(true);
-  const first = await bridge.start({ cwd: root, task: 'first' });
+  const first = await bridge.start({ cwd: root, task: 'first', webEmbed: false });
   (await ready(fake)).finish();
   await bridge.wait(first.agent_id);
   const other = await new Bridge({ root, runtimeFactory: fake.create }).init();
@@ -172,7 +172,7 @@ test('another bridge instance cannot write an owned native session', async t => 
 test('long final answers are bounded in tool output and preserved in a file', async t => {
   const { root, bridge, fake } = await setup(t);
   await bridge.setEnabled(true);
-  const first = await bridge.start({ cwd: root, task: 'first' });
+  const first = await bridge.start({ cwd: root, task: 'first', webEmbed: false });
   (await ready(fake)).finish('completed', 'a'.repeat(10_000));
   const result = await bridge.wait(first.agent_id);
   assert.equal(result.final.length, 4000);
@@ -223,7 +223,7 @@ test('plain tasks stay on the unpatched profile', async t => {
 test('descendant session events land in children, not as bridge agents', async t => {
   const { root, bridge, fake } = await setup(t);
   await bridge.setEnabled(true);
-  const task = await bridge.start({ cwd: root, task: 'spawn children', permission: 'read-only' });
+  const task = await bridge.start({ cwd: root, task: 'spawn children', permission: 'read-only', webEmbed: false });
   const runtime = await ready(fake);
   const childId = '11111111-2222-3333-4444-555555555555';
   runtime.emit({ type: 'turn/start', seq: 1, time: 1, data: { turn: 1 } }, childId);
@@ -257,7 +257,7 @@ test('extra user prompts mark a user takeover for the next parent read', async t
 test('followup refuses while the session log shows fresh external writes', async t => {
   const { root, bridge, fake } = await setup(t);
   await bridge.setEnabled(true);
-  const task = await bridge.start({ cwd: root, task: 'first' });
+  const task = await bridge.start({ cwd: root, task: 'first', webEmbed: false });
   (await ready(fake)).finish();
   await bridge.wait(task.agent_id);
   const sessionDir = join(bridge.home, 'sessions', '--D-workspace--', task.session_id);
