@@ -233,8 +233,9 @@ export class Bridge {
     let entry = this.live.get(record.agent_id);
     if (!entry) {
       if (this.live.size >= this.maxParallel) {
-        const idle = [...this.live.values()].find(item => !item.busy);
+        const idle = [...this.live.values()].find(item => !item.busy && !item.viewCount);
         if (idle) await this.release(idle.record.agent_id);
+        else throw new Error('Runtime capacity is retained by active tasks or native views; close a view or stop a task first.');
       }
       const release = await this.claim(record.agent_id);
       entry = { record, release, runtime: null, timer: null, done: null, cancel: false, busy: false };
@@ -377,6 +378,7 @@ export class Bridge {
         try { await entry.runtime.close(); entry.runtime = null; }
         catch (cleanup) { record.error += `; cleanup: ${errorText(cleanup)}`; }
       }
+      if (record.webEmbed) record.nativeUrl = null;
     } finally {
       record.updatedAt = new Date().toISOString();
       // The external-activity guard compares native-log freshness against
@@ -496,14 +498,34 @@ export class Bridge {
       // SDK has no mid-turn cancel method. Closing this task's runtime does not affect other tasks.
       await entry.runtime?.close();
       await entry.done;
-      await this.release(id);
+      await this.release(id, { force: true });
       return this.status(id);
     });
   }
 
-  async release(id) {
+  async retainView(id) {
+    return this.admit(async () => {
+      const entry = this.live.get(id);
+      if (!entry?.runtime || entry.releasing) throw new Error('Native task runtime is not available');
+      entry.viewCount = (entry.viewCount ?? 0) + 1;
+      clearTimeout(entry.timer);
+      let released = false;
+      return () => this.admit(async () => {
+        if (released) return;
+        released = true;
+        entry.viewCount--;
+        if (this.live.get(id) === entry && !entry.busy && !entry.viewCount) {
+          clearTimeout(entry.timer);
+          entry.timer = setTimeout(() => this.admit(() => this.release(id)).catch(() => {}), this.idleMs);
+          entry.timer.unref();
+        }
+      });
+    });
+  }
+
+  async release(id, { force = false } = {}) {
     const entry = this.live.get(id);
-    if (!entry || entry.busy) return;
+    if (!entry || entry.busy || (entry.viewCount && !force)) return;
     // Stop and drain the producer before publishing revocation: a reader
     // already awaiting disk must not save a dead generation's URL afterwards.
     entry.releasing = true;
@@ -571,7 +593,7 @@ export class Bridge {
     await Promise.all([...this.live.keys()].map(async id => {
       const entry = this.live.get(id);
       if (entry.busy) await this.stop(id);
-      await this.release(id);
+      await this.release(id, { force: true });
     }));
   }
 }

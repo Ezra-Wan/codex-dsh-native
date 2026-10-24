@@ -18,6 +18,10 @@
     "transport/frames.ts": {
       "source": "packages/experimental/webworker-runtime/src/transport/frames.ts",
       "sha256": "bb0b16cd5c732cdd745b5b16fa1064c03016866fd27cc0be019bf77b4971d3d4"
+    },
+    "node-module-stub.ts": {
+      "source": "apps/web/src/node-module-stub.ts",
+      "sha256": "cf0eac2a050ca8392fab190a648f5b0c359a3b2aa5b819ec26e901900c4a532e"
     }
   }
 }

@@ -1,2 +1,6 @@
+* text=auto
+*.png binary
+*.jpg binary
 # Preserve hashes and exact upstream source bytes on Windows checkouts.
 vendor/deepseek-worker-tunnel/** -text
+vendor/dsh-for-vscode/** -text whitespace=cr-at-eol
