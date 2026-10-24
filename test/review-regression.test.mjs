@@ -157,3 +157,21 @@ test('backend marker: worker is an explicit failover directive, native is record
   assert.equal(native.backend, 'native');
   await bridge.stop(native.agent_id);
 });
+
+test('ds_wait returns on the first fresh native event, not at the timeout (P0-B data layer)', async t => {
+  const { root, fake, bridge } = await setup(t);
+  await bridge.setEnabled(true);
+  const task = await bridge.start({ cwd: root, task: 'long work', permission: 'read-only' });
+  const runtime = await ready(fake);
+  const started = Date.now();
+  const pending = bridge.wait(task.agent_id, 20_000);
+  // A fresh root event arrives well before any timeout: wait must settle.
+  await new Promise(resolve => setTimeout(resolve, 60));
+  runtime.emit({ type: 'tool/call', seq: 7, time: Date.now(), data: { callId: 'x', name: 'read', arguments: '{}' } });
+  const result = await pending;
+  const elapsed = Date.now() - started;
+  assert.ok(elapsed < 5_000, `wait settled on the event in ${elapsed}ms, not the 20s timeout`);
+  assert.ok(result.progress.eventCount >= 1);
+  runtime.finish();
+  await bridge.wait(task.agent_id);
+});
