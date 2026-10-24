@@ -14,8 +14,7 @@
 ```powershell
 Set-Location -LiteralPath 'D:\@harness\codex-dsh-native-p0'
 npm ci
-npm test          # 全部测试（含验收回归 review-regression）
-npm run prototype # 参考样例回放页（非主链路）：http://127.0.0.1:8791
+npm test          # 全部测试（含验收回归 review-regression；fixture 已入库）
 npm run native-replay  # 官方 Web：输出带 token 的 URL（.local/native-replay.json）
 ```
 

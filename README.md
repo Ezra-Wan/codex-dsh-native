@@ -127,7 +127,7 @@ MCP 配置新增后，需要由 Codex 重新加载服务；当前已开始的聊
 
 升级时同时调整 DSH 与 SDK 的版本，安装后跑离线检查和真实闭环，再切换使用。第一版不 fork DSH、不复制它的 agent loop，也不在启动时自动升级。这样尽量跟随上游，同时保留可重复的环境。
 
-上游 UI 复用的契约研究与三路比较见 [docs/upstream-ui-reuse.md](docs/upstream-ui-reuse.md)；离线轨迹原型见 `ui/prototype/`（`npm run prototype` 后打开 127.0.0.1:8791），来源与许可见 `ui/prototype/NOTICE.md`。
+上游 UI 复用的契约研究与三路比较见 [docs/upstream-ui-reuse.md](docs/upstream-ui-reuse.md)（当前路线：官方 Web 容器适配）；主题令牌来源见 `ui/theme.css`（由 `scripts/extract-theme.mjs` 从官方主题包逐字提取）。早期离线原型（`ui/prototype/`）已于 2026-10-24 归档，历史保留在 git。
 
 ## Agent 模型：子 agent 与 peer 的工作区规范
 
