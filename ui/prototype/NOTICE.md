@@ -1,5 +1,7 @@
 # 来源与许可说明（ui/prototype）
 
+> **定位声明（2026-10-24）**：本目录是**参考实现/回归样例，不在 Codex 主展示链路**。主链路为 `ui/observer.mjs` 容器卡片（承载官方 Web 原实现）。见 docs/upstream-ui-reuse.md 与 .local/acceptance-review-20261024/REVIEW.md。
+
 **两条并行的展示路线**（2026-10-23 起）：
 
 1. **原生本体回放（适配器路线，`scripts/native-replay.mjs`）**：不复制任何 UI 代码——直接用本机官方 `dsh` CLI 的 web profile（实测 0.2.0-rc.2）服务原生 Web 应用，`DSH_HOME` 指向本项目隔离的 `.local/dsh-home`，bridge SDK（0.2.1-rc.2）写入的会话由官方持久化栈读回、官方 UI 渲染。只读回放、无模型调用、不触碰旧 `D:\@harness\dsh` 环境。已验证：会话列表、对话视图、轨迹视图（时间线可拖拽）全部完整渲染（证据截图 19-21）。这是像素级对照的最终基准。
