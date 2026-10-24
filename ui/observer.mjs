@@ -68,11 +68,17 @@ function mountOfficial(url) {
 async function refreshSelected() {
   if (!selected) return;
   try {
-    const status = await call('ds_wait', { agent_id: selected, timeoutMs: 0 });
+    // Event-driven bounded wait: returns as soon as a fresh native event for
+    // this task lands (bridge wakes waiters), at most 2s otherwise — the
+    // card's minimal "text arriving before completion" signal. The embedded
+    // official UI remains the full-fidelity view.
+    const status = await call('ds_wait', { agent_id: selected, timeoutMs: 2000 });
     const bits = [LABELS[status.status] ?? status.status];
     if (status.children?.length) bits.push(`${status.children.length} 个子会话`);
     if (status.userTakeover) bits.push('用户接管中');
     $('state').textContent = bits.join(' · ');
+    const lastText = [...(status.recentActions ?? [])].reverse().find(action => action.type === 'assistant/message' && action.text);
+    if (lastText) $('state').title = lastText.text.slice(0, 120);
   } catch { /* badge keeps its last value */ }
 }
 
@@ -102,15 +108,26 @@ async function receive(result) {
 }
 
 app.ontoolresult = result => { void receive(result).catch(() => renderFallback('读取任务状态失败')); };
-$('tasks').addEventListener('change', () => { selected = $('tasks').value; void refreshSelected(); });
+$('tasks').addEventListener('change', () => {
+  selected = $('tasks').value;
+  // Anchor the embed to the chosen session. The official app ignores the
+  // hash today (no deep-link); once upstream supports it this switch becomes
+  // "click a task, see that task" without further card changes.
+  const frame = $('frame');
+  if (frame.dataset.mounted && selected) frame.src = `${frame.dataset.mounted}#session=${selected}`;
+  void refreshSelected();
+});
 
 try {
   await app.connect();
   const initial = await app.callServerTool({ name: 'ds_bridge', arguments: {} });
   await receive(initial);
-  setInterval(() => {
-    if (!document.hidden && $('fallback').style.display !== 'block') void refreshSelected();
-  }, 2000);
+  // Event-driven loop instead of a fixed 2s poll: each wait parks up to 2s
+  // and returns early on the task's next native event.
+  for (;;) {
+    if (!document.hidden && selected) await refreshSelected();
+    else await new Promise(resolve => setTimeout(resolve, 1000));
+  }
 } catch (error) {
   renderFallback(`宿主界面尚未连通：${error?.message ?? error}`);
 }
