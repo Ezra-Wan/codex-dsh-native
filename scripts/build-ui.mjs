@@ -1,6 +1,8 @@
 import { build } from 'esbuild';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
+import { buildNativeVendor } from './build-native-vendor.mjs';
+await buildNativeVendor();
 const output = await build({ entryPoints: [fileURLToPath(new URL('../ui/observer.mjs', import.meta.url))],
   bundle: true, write: false, format: 'esm', minify: true, target: ['es2022'] });
 const template = await readFile(new URL('../ui/observer.html', import.meta.url), 'utf8');
