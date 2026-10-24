@@ -191,26 +191,38 @@ test('ds_wait returns on the first fresh native event, not at the timeout (P0-B 
   await bridge.wait(task.agent_id);
 });
 
-test('consecutive assistant fragments surface before completion, and parallel tasks never wake each other', async t => {
+test('durable fragments surface one wait at a time; a foreign lane event never wakes another lane\'s waiter', async t => {
   const { root, fake, bridge } = await setup(t);
   await bridge.setEnabled(true);
   const laneA = await bridge.start({ cwd: root, task: 'lane A', permission: 'read-only', name: 'A' });
-  const laneB = await bridge.start({ cwd: root, 'task': 'lane B', permission: 'read-only', name: 'B' });
+  const laneB = await bridge.start({ cwd: root, task: 'lane B', permission: 'read-only', name: 'B' });
   const runtimeA = await ready(fake, 0);
   const runtimeB = await ready(fake, 1);
   const message = (text, seq) => ({ type: 'assistant/message', seq, time: Date.now(), data: { message: { content: [{ type: 'text', text }] } } });
-  // Two waits park; each must surface its OWN lane's fragments in order.
-  const waitA = bridge.wait(laneA.agent_id, 20_000);
+  // NOTE: these are durable committed assistant/message events (the
+  // persisted granularity), NOT native assistant-stream chunks; this test
+  // covers the bridge waiter semantics only, not streaming display.
+  const texts = actions => (actions ?? []).filter(action => action.type === 'assistant/message').map(action => action.text);
+  const stillPending = (promise, ms = 120) => Promise.race([promise.then(() => false), new Promise(r => setTimeout(() => r(true), ms))]);
+
+  // Both waiters park. B's fragment must leave A's waiter pending.
+  const waitA1 = bridge.wait(laneA.agent_id, 20_000);
   const waitB = bridge.wait(laneB.agent_id, 20_000);
   await new Promise(resolve => setTimeout(resolve, 60));
-  runtimeB.emit(message('B 的第一段', 1)); // must NOT wake A's waiter
+  runtimeB.emit(message('B 的第一段', 1));
+  assert.ok(await stillPending(waitA1), 'A 的等待在 B 事件后仍然挂起（未串唤醒）');
   runtimeA.emit(message('A 的第一段', 1));
+  const a1 = await waitA1;
+  assert.deepEqual(texts(a1.recentActions), ['A 的第一段'], '第一次等待只见到第一段（逐次到达）');
+  const b = await waitB;
+  assert.deepEqual(texts(b.recentActions), ['B 的第一段'], 'B 只见到自己的片段');
+
+  // A second wait parks again and surfaces ONLY the second fragment as new.
+  const waitA2 = bridge.wait(laneA.agent_id, 20_000);
+  await new Promise(resolve => setTimeout(resolve, 60));
   runtimeA.emit(message('A 的第二段', 2));
-  const [a, b] = await Promise.all([waitA, waitB]);
-  const aTexts = (a.recentActions ?? []).filter(action => action.type === 'assistant/message').map(action => action.text);
-  const bTexts = (b.recentActions ?? []).filter(action => action.type === 'assistant/message').map(action => action.text);
-  assert.deepEqual(aTexts, ['A 的第一段', 'A 的第二段'], 'lane A surfaced both fragments before completion');
-  assert.deepEqual(bTexts, ['B 的第一段'], 'lane B surfaced only its own fragment');
+  const a2 = await waitA2;
+  assert.deepEqual(texts(a2.recentActions), ['A 的第一段', 'A 的第二段'], '第二次等待后两段齐备且有序');
   runtimeA.finish(); runtimeB.finish();
   await bridge.wait(laneA.agent_id);
   await bridge.wait(laneB.agent_id);
