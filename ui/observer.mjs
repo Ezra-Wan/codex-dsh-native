@@ -7,6 +7,7 @@
 // - polls only light status (ds_wait with timeout 0) for the badge; all
 //   conversation rendering belongs to the embedded official app.
 import { App } from '@modelcontextprotocol/ext-apps';
+import { createObserverCore, TERMINAL } from './observer-core.mjs';
 
 const $ = id => document.getElementById(id);
 const app = new App({ name: 'DSH observer container', version: '0.2.0' }, { availableDisplayModes: ['inline', 'fullscreen'] });
@@ -20,13 +21,23 @@ const call = async (name, args = {}) => parse(await app.callServerTool({ name, a
 
 let selected = null;
 let tasks = [];
-let observeSeq = 0;      // bumped on task switch: stale responses are dropped
-let errorStreak = 0;     // consecutive failures drive exponential backoff
-let terminalSeen = false; // stop hot waiting once the task settles; followup resets
-const TERMINAL = new Set(['completed', 'completed_with_warnings', 'failed', 'interrupted']);
-const MIN_LOOP_MS = 800;
-const MAX_BACKOFF_MS = 10_000;
-const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+function applyStatus(status) {
+  const bits = [LABELS[status.status] ?? status.status];
+  if (status.children?.length) bits.push(`${status.children.length} 个子会话`);
+  if (status.userTakeover) bits.push('用户接管中');
+  $('state').textContent = bits.join(' · ');
+  // Latest durable assistant message, hover hint only — NOT the native
+  // streaming view; the embedded official UI owns that.
+  const lastText = [...(status.recentActions ?? [])].reverse().find(action => action.type === 'assistant/message' && action.text);
+  if (lastText) $('state').title = lastText.text.slice(0, 120);
+}
+
+const core = createObserverCore({
+  wait: async id => call('ds_wait', { agent_id: id, timeoutMs: 2000 }),
+  apply: applyStatus,
+  visible: () => !document.hidden,
+});
 
 function renderFallback(message) {
   $('frame').style.display = 'none';
@@ -72,39 +83,6 @@ function mountOfficial(url) {
   }, 5000);
 }
 
-async function refreshSelected() {
-  // Capture the task and observation version this request belongs to; a
-  // response landing after a task switch is dropped, never rendered.
-  const id = selected;
-  const seq = observeSeq;
-  const startedAt = Date.now();
-  try {
-    // Event-driven bounded wait: returns as soon as a fresh native event for
-    // this task lands (bridge wakes waiters), at most 2s otherwise. The
-    // embedded official UI remains the full-fidelity view.
-    const status = await call('ds_wait', { agent_id: id, timeoutMs: 2000 });
-    if (seq !== observeSeq || id !== selected) return;
-    errorStreak = 0;
-    const bits = [LABELS[status.status] ?? status.status];
-    if (status.children?.length) bits.push(`${status.children.length} 个子会话`);
-    if (status.userTakeover) bits.push('用户接管中');
-    $('state').textContent = bits.join(' · ');
-    // Latest durable assistant message, as a hover hint only — this is NOT
-    // the native streaming view; the embedded official UI owns that.
-    const lastText = [...(status.recentActions ?? [])].reverse().find(action => action.type === 'assistant/message' && action.text);
-    if (lastText) $('state').title = lastText.text.slice(0, 120);
-    if (TERMINAL.has(status.status)) terminalSeen = true;
-  } catch {
-    errorStreak++;
-  }
-  // Pace every path: instant returns (terminal ids, errors, non-live tasks)
-  // must not turn the loop into a request storm, and errors back off.
-  const spent = Date.now() - startedAt;
-  const backoff = errorStreak ? Math.min(1000 * 2 ** (errorStreak - 1), MAX_BACKOFF_MS) : 0;
-  const idle = Math.max(MIN_LOOP_MS - spent, backoff);
-  if (idle > 0) await sleep(idle);
-}
-
 async function receive(result) {
   const data = parse(result);
   const items = data.items ?? (data.agent_id ? [data] : []);
@@ -125,14 +103,10 @@ async function receive(result) {
       return option;
     }));
     $('tasks').value = selected;
-    // A followup/tool result may have revived the task: resume hot watching.
+    // A followup/tool result may have revived the task: resume hot watching,
+    // or mark it terminal so the paced loop parks in slow watch.
     const status = items.find(item => item.agent_id === selected);
-    if (status && !TERMINAL.has(status.status)) {
-      terminalSeen = false;
-      errorStreak = 0;
-    } else if (status && TERMINAL.has(status.status)) {
-      terminalSeen = true;
-    }
+    if (status) core.observeStatus(status);
   }
   // Layout authority is the nativeReplay field ONLY: a bare task summary
   // (ds_observe / ds_wait) carries no replay state and must not flip the
@@ -146,12 +120,10 @@ async function receive(result) {
 
 app.ontoolresult = result => { void receive(result).catch(() => renderFallback('读取任务状态失败')); };
 $('tasks').addEventListener('change', () => {
-  // Switching tasks: invalidate in-flight responses for the old task, clear
-  // its status text, and start a fresh observation version.
+  // Switching tasks: invalidate in-flight responses for the old task and
+  // clear its status text; the core drops stale results by sequence.
   selected = $('tasks').value;
-  observeSeq++;
-  terminalSeen = false;
-  errorStreak = 0;
+  core.switchTask();
   $('state').textContent = '';
   $('state').removeAttribute('title');
   // The official app ignores the hash today (no deep-link support): this is
@@ -164,15 +136,10 @@ try {
   await app.connect();
   const initial = await app.callServerTool({ name: 'ds_bridge', arguments: {} });
   await receive(initial);
-  // Single observation loop. Hot loop while a live task runs; parked pacing
-  // when hidden; slow idle watch once the task is terminal (a followup tool
-  // result resets it in receive).
-  for (;;) {
-    if (!selected) await sleep(1000);
-    else if (document.hidden) await sleep(1000);
-    else if (terminalSeen) await sleep(5000);
-    else await refreshSelected();
-  }
+  // Single paced loop with controller-tested discipline (observer-core.mjs):
+  // event-driven bounded waits while live, terminal slow watch, backoff on
+  // errors, stale-response dropping across task switches.
+  await core.run(() => selected);
 } catch (error) {
   renderFallback(`宿主界面尚未连通：${error?.message ?? error}`);
 }
