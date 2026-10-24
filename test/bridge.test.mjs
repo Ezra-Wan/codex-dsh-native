@@ -266,7 +266,16 @@ test('followup refuses while the session log shows fresh external writes', async
   await writeFile(logPath, '{}\n');
   const fresh = new Date(Date.now() - 5_000);
   await utimes(logPath, fresh, fresh);
-  await assert.rejects(bridge.followup(task.agent_id, 'next'), /user side may be driving/);
+  // Fresh writes only read as external when they postdate the bridge's own mark;
+  // followup prefers the live in-memory record, so age both copies.
+  {
+    const mark = Date.now() - 300_000;
+    const entry = bridge.live.get(task.agent_id);
+    if (entry) entry.record.lastSelfWriteAt = mark;
+    const record = await bridge.read(task.agent_id);
+    await bridge.save({ ...record, lastSelfWriteAt: mark });
+  }
+  await assert.rejects(bridge.followup(task.agent_id, 'next'), /external writes/);
   const stale = new Date(Date.now() - 300_000);
   await utimes(logPath, stale, stale);
   const next = await bridge.followup(task.agent_id, 'next');
