@@ -376,3 +376,18 @@ test('revocation closes the loop across bridge and card: null clears cache, with
   await pumpUntil(() => doc.byId.get('frame').dataset.mounted === urlA2);
   assert.equal(doc.byId.get('frame').dataset.mounted, urlA2, 'new generation remounts via ds_wait');
 });
+
+test('solo dispatch adds the missing select option, not just the value', () => {
+  const doc = fakeDom();
+  const card = createCard({ app: fakeApp(), doc });
+  const old = { agent_id: 'dddddddd-0000-0000-0000-000000000004', name: '旧任务D', status: 'completed' };
+  const dispatched = { agent_id: 'eeeeeeee-0000-0000-0000-000000000005', name: '新派发E', status: 'starting', nativeUrl: null };
+  card.receive({ items: [old] });
+  card.receive(dispatched);
+  const select = doc.byId.get('tasks');
+  assert.deepEqual(select.children.map(option => option.value), [old.agent_id, dispatched.agent_id]);
+  assert.equal(select.children[1].textContent, dispatched.name);
+  assert.equal(select.value, dispatched.agent_id);
+  card.receive({ ...dispatched, status: 'running' });
+  assert.equal(select.children.length, 2, 'repeated results do not duplicate options');
+});
