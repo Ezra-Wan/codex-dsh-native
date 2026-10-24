@@ -99,5 +99,7 @@ if (arg) {
   await server.connect(new StdioServerTransport());
   // The observer card embeds the official web UI; boot it out-of-band so the
   // first open is ready. Failure only degrades the card to its fallback.
-  bridge.ensureNativeReplay().catch(() => {});
+  // DSH_NATIVE_REPLAY=off keeps tests (and other side-effect-free embedders)
+  // from ever spawning the local web process.
+  if (process.env.DSH_NATIVE_REPLAY !== 'off') bridge.ensureNativeReplay().catch(() => {});
 }

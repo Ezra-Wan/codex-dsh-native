@@ -13,7 +13,7 @@ test('MCP initialization, tools and switch work over real stdio without model ca
   const transport = new StdioClientTransport({
     command: process.execPath,
     args: [fileURLToPath(new URL('../src/server.mjs', import.meta.url))],
-    env: { ...process.env, CODEX_DSH_BRIDGE_HOME: root },
+    env: { ...process.env, CODEX_DSH_BRIDGE_HOME: root, DSH_NATIVE_REPLAY: 'off' },
     stderr: 'pipe',
   });
   try {
