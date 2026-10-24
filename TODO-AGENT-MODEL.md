@@ -2,6 +2,8 @@
 
 创建：2026-10-23，Asia/Shanghai。独立于 [TODO-HANDOFF.md](TODO-HANDOFF.md)（那边管观察链路与宿主验收）；本文管**agent 组织模型**。设计定稿见当日对话，事实核查基于官方包 README（`dsh-subagent` / `dsh-tool-subagent` / `dsh-subagent-spawn-in-process` / `dsh-client-ui-subagent`）。
 
+2026-10-24 最新交互与插件要求统一见 [TODO-HANDOFF.md 文首](TODO-HANDOFF.md)：每任务单条 `dsh-xxx` 状态、区分“同步工作区”与原生子 agent、单击展开实际执行会话的 DSH 原生逐段流；OPS 在任务运行环境中始终可用，余额仅在侧边展开时可用。本文件的角色/工作区流程沿用原约定，展示项不得继续复活已归档的手写原型。
+
 ## 角色定义（一句话版）
 
 - **子 agent**：DSH 原生 spawn-in-process 后代，活在**一个** Codex 驱动的根会话内；进程内并行、共享派生工作区、仅 DS 父会话可续聊（人/Codex 均不可直接跟进）；不进普通侧栏列表（原生已如此）。
@@ -47,7 +49,7 @@ X-peer-<n>/    peer 拷贝区（git worktree 优先；非 git 才整目录拷贝
 ### L5 · 角色与展示（数据层；UI 依赖 TODO 1 宿主验收）
 - [x] `ds_start` 增加 `role: 'sub' | 'peer'`，入 record/摘要；`sub` 任务提示使用 `X__<task>` 派生区、`peer` 任务使用拷贝区——由调用方按规范选择，bridge 只记录。
 - [ ] Codex 端展示（流内轻卡 vs 侧栏按钮、子 agent 浏览器可放大占满侧栏）：依赖 TODO 1 的宿主能力实测后实现；数据层已就绪。
-- [ ] 子 agent 浏览器（工作区 → 任务会话 → 子会话树，只读轨迹）：待 L3 真实闸门后做取数，UI 复用原型渲染器。
+- [ ] 子 agent 浏览器（工作区 → 任务会话 → 子会话树，只读观察）：待 L3 真实闸门后做取数，UI 复用 DSH 原实现并按需适配；遵循单条任务入口和原生流要求，不再依赖已归档原型渲染器。
 
 ## 全局边界（不变）
 
