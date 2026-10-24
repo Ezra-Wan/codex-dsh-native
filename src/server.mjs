@@ -6,7 +6,11 @@ import { z } from 'zod';
 import { Bridge } from './bridge.mjs';
 
 const root = process.env.CODEX_DSH_BRIDGE_HOME ?? fileURLToPath(new URL('../.local/', import.meta.url));
-const bridge = await new Bridge({ root }).init();
+const webEmbedBasePort = Number(process.env.CODEX_DSH_WEB_BASE_PORT ?? 8800);
+if (!Number.isInteger(webEmbedBasePort) || webEmbedBasePort < 1024 || webEmbedBasePort > 65533) {
+  throw new Error('CODEX_DSH_WEB_BASE_PORT must be an integer between 1024 and 65533.');
+}
+const bridge = await new Bridge({ root, webEmbedBasePort }).init();
 const arg = process.argv[2];
 if (arg) {
   if (arg === '--enable' || arg === '--disable') console.log(JSON.stringify(await bridge.setEnabled(arg === '--enable')));
