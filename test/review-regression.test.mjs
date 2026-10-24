@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, rm, mkdir, writeFile, readFile, utimes, cp, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { realpath, stat } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { Bridge } from '../src/bridge.mjs';
 
@@ -37,10 +38,10 @@ function factory() {
   };
 }
 
-async function setup(t) {
+async function setup(t, options = {}) {
   const root = await mkdtemp(join(tmpdir(), 'dsh-review-fix-'));
   const fake = factory();
-  const bridge = await new Bridge({ root, runtimeFactory: fake.create, idleMs: 60_000 }).init();
+  const bridge = await new Bridge({ root, runtimeFactory: fake.create, idleMs: 60_000, ...options }).init();
   t.after(async () => { await bridge.close(); await rm(root, { recursive: true, force: true }); });
   return { root, fake, bridge };
 }
@@ -70,7 +71,7 @@ test('a running child session is readable through ds_events before the parent pe
   const childId = 'bc243aa7-57aa-47b5-b219-c73a6a45c5ed';
   const source = fileURLToPath(new URL('../test/fixtures/sessions/--D-~0040harness-codex-dsh-native-p0-.local-demo-1792663550562-workspace--/', import.meta.url));
   await bridge.setEnabled(true);
-  const task = await bridge.start({ cwd: root, task: 'spawn children', permission: 'read-only' });
+  const task = await bridge.start({ cwd: root, task: 'spawn children', permission: 'read-only', webEmbed: false });
   const runtime = await ready(fake);
   const target = join(bridge.home, 'sessions', '--D-~0040harness-codex-dsh-native-p0-.local-demo-1792663550562-workspace--');
   await mkdir(join(bridge.home, 'sessions'), { recursive: true });
@@ -89,7 +90,7 @@ test('a running child session is readable through ds_events before the parent pe
 test('takeover protection sees the real two-level session layout', async t => {
   const { root, fake, bridge } = await setup(t);
   await bridge.setEnabled(true);
-  const task = await bridge.start({ cwd: root, task: 'first' });
+  const task = await bridge.start({ cwd: root, task: 'first', webEmbed: false });
   (await ready(fake)).finish();
   await bridge.wait(task.agent_id);
   // Real layout: sessions/<workspace-dir>/<session-id>/session.v4.jsonl.zstd
@@ -128,7 +129,7 @@ test('user takeover is reported on the second turn as well', async t => {
 test('the guard accepts the bridge\'s own fresh writes but rejects external ones', async t => {
   const { root, fake, bridge } = await setup(t);
   await bridge.setEnabled(true);
-  const task = await bridge.start({ cwd: root, task: 'first' });
+  const task = await bridge.start({ cwd: root, task: 'first', webEmbed: false });
   (await ready(fake)).finish();
   await bridge.wait(task.agent_id);
   const sessionDir = join(bridge.home, 'sessions', '--D-workspace--', task.session_id);
@@ -147,15 +148,16 @@ test('the guard accepts the bridge\'s own fresh writes but rejects external ones
 });
 
 test('the native URL is generation-scoped: release revokes it, cold followup re-collects the new token', async t => {
-  const { root, fake, bridge } = await setup(t);
+  // Isolated port band: parallel test files each allocate from 8801.
+  const { root, fake, bridge } = await setup(t, { webEmbedBasePort: 8850 });
   await bridge.setEnabled(true);
   const task = await bridge.start({ cwd: root, task: 'two generations', permission: 'read-only' });
-  const urlFile = join(bridge.root, 'task-urls', '8801.json');
+  const urlFile = join(bridge.root, 'task-urls', '8851.json');
   await mkdir(join(bridge.root, 'task-urls'), { recursive: true });
-  const writeUrl = token => writeFile(urlFile, JSON.stringify({ url: `http://127.0.0.1:8801/?token=${token}`, pid: 1, writtenAt: new Date().toISOString() }));
+  const writeUrl = token => writeFile(urlFile, JSON.stringify({ url: `http://127.0.0.1:8851/?token=${token}`, pid: 1, writtenAt: new Date().toISOString() }));
   await writeUrl('gen1');
   for (let i = 0; i < 40 && !(await bridge.status(task.agent_id)).nativeUrl; i++) await new Promise(r => setTimeout(r, 100));
-  assert.equal((await bridge.status(task.agent_id)).nativeUrl, 'http://127.0.0.1:8801/?token=gen1');
+  assert.equal((await bridge.status(task.agent_id)).nativeUrl, 'http://127.0.0.1:8851/?token=gen1');
   (await ready(fake)).finish();
   await bridge.wait(task.agent_id);
   await bridge.release(task.agent_id);
@@ -166,10 +168,10 @@ test('the native URL is generation-scoped: release revokes it, cold followup re-
   // so the new generation's adapter writes the new token afterwards.
   await bridge.followup(task.agent_id, 'continue');
   await writeUrl('gen2');
-  for (let i = 0; i < 40 && (await bridge.status(task.agent_id)).nativeUrl !== 'http://127.0.0.1:8801/?token=gen2'; i++) {
+  for (let i = 0; i < 40 && (await bridge.status(task.agent_id)).nativeUrl !== 'http://127.0.0.1:8851/?token=gen2'; i++) {
     await new Promise(r => setTimeout(r, 100));
   }
-  assert.equal((await bridge.status(task.agent_id)).nativeUrl, 'http://127.0.0.1:8801/?token=gen2', 'second generation URL collected');
+  assert.equal((await bridge.status(task.agent_id)).nativeUrl, 'http://127.0.0.1:8851/?token=gen2', 'second generation URL collected');
   (await ready(fake, 1)).finish();
   await bridge.wait(task.agent_id);
 });
@@ -291,4 +293,39 @@ test('durable fragments surface one wait at a time; a foreign lane event never w
   runtimeA.finish(); runtimeB.finish();
   await bridge.wait(laneA.agent_id);
   await bridge.wait(laneB.agent_id);
+});
+
+test('web-embed tasks run in a task-scoped home whose only sessions are the task\'s own', async t => {
+  const { root, fake, bridge } = await setup(t, { webEmbedBasePort: 8860 });
+  await bridge.setEnabled(true);
+  // The shared profiles installation exists in real homes; fake it for the junction target.
+  await mkdir(join(bridge.home, 'profiles', 'sdk'), { recursive: true });
+  const task = await bridge.start({ cwd: root, task: 'scoped home', permission: 'read-only' });
+  const runtime = await ready(fake);
+  // The runtime home is the task home: private sessions dir, profiles
+  // junction-linked to the shared installation (one sdk-web install).
+  const taskHome = bridge.taskHome(task.agent_id);
+  assert.equal(runtime.options.home, taskHome);
+  const statSessions = await stat(join(taskHome, 'sessions'));
+  assert.ok(statSessions.isDirectory());
+  assert.equal(await readFile(join(taskHome, 'profiles'), 'utf8').then(() => true).catch(() => false), false, 'profiles is a link, not a copy');
+  assert.equal(await realpath(join(taskHome, 'profiles')), await realpath(join(bridge.home, 'profiles')));
+  // ds_events reads this task's sessions from the task home, not the shared one.
+  const fixtureDir = '--D-~0040harness-codex-dsh-native-p0-.local-demo-1792663550562-workspace--';
+  const source = fileURLToPath(new URL('../test/fixtures/sessions/--D-~0040harness-codex-dsh-native-p0-.local-demo-1792663550562-workspace--/', import.meta.url));
+  await cp(source, join(taskHome, 'sessions', fixtureDir), { recursive: true });
+  const childId = 'bc243aa7-57aa-47b5-b219-c73a6a45c5ed';
+  runtime.emit({ type: 'turn/start', seq: 1, time: 1, data: { turn: 1 } }, childId);
+  const events = await bridge.events(childId);
+  assert.equal(events.session_id, childId);
+  assert.ok(events.events.length > 0, 'child events read from the task-scoped home');
+  runtime.finish();
+  await bridge.wait(task.agent_id);
+  await bridge.release(task.agent_id);
+  // The task home SURVIVES release: cold followup resumes the same session
+  // identity from the same home (generation-scoped URL, stable session home).
+  await bridge.followup(task.agent_id, 'continue');
+  assert.equal(bridge.taskHome(task.agent_id), taskHome);
+  (await ready(fake, 1)).finish();
+  await bridge.wait(task.agent_id);
 });

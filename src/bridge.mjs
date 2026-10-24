@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile, rename, stat, readdir, rm } from 'node:fs/promises';
+import { mkdir, readFile, writeFile, rename, stat, readdir, rm, symlink } from 'node:fs/promises';
 import { isAbsolute, join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
@@ -61,6 +61,34 @@ export class Bridge {
   nextWebPort() {
     this.portCursor += 1;
     return this.webEmbedBasePort + this.portCursor;
+  }
+
+  // Each web-embed task gets its OWN DSH_HOME (sessions private to the task,
+  // profiles junction-linked to the shared installation). The official UI in
+  // that process therefore lists exactly this task's sessions — the receiving
+  // side of the S2 session-selection contract — instead of every persisted
+  // session under the shared home (listState reads sessionQuery.listSessions).
+  taskHome(id) {
+    return join(this.root, 'task-homes', id);
+  }
+
+  async prepareTaskHome(id) {
+    const home = this.taskHome(id);
+    await mkdir(join(home, 'sessions'), { recursive: true });
+    const link = join(home, 'profiles');
+    try { await symlink(this.homeProfilesRoot(), link, 'junction'); }
+    catch (error) { if (error.code !== 'EEXIST') throw error; }
+    return home;
+  }
+
+  homeProfilesRoot() {
+    return join(this.home, 'profiles');
+  }
+
+  // Which home holds a task's native sessions: task-scoped for web-embed,
+  // shared for everything else.
+  sessionHome(record) {
+    return record.webEmbed ? this.taskHome(record.agent_id) : this.home;
   }
 
   path(id) {
@@ -171,7 +199,7 @@ export class Bridge {
   async assertSessionQuiet(record, windowMs = 120_000) {
     if (!record.persisted) return;
     const ownMark = (record.lastSelfWriteAt ?? 0) + 2_000;
-    const sessionsRoot = join(this.home, 'sessions');
+    const sessionsRoot = join(this.sessionHome(record), 'sessions');
     for (const workspace of await readdir(sessionsRoot).catch(() => [])) {
       const sessionDir = join(sessionsRoot, workspace, record.session_id);
       const entries = await readdir(sessionDir).catch(() => []);
@@ -246,7 +274,7 @@ export class Bridge {
           // from a previous generation is stale the moment its process died.
           record.runtimeGeneration = (record.runtimeGeneration ?? 0) + 1;
         }
-        entry.runtime = this.runtimeFactory(record, { home: this.home, patches, ...(record.webEmbed ? { profile: 'sdk-web' } : {}) });
+        entry.runtime = this.runtimeFactory(record, { home: record.webEmbed ? await this.prepareTaskHome(record.agent_id) : this.home, patches, ...(record.webEmbed ? { profile: 'sdk-web' } : {}) });
         await entry.runtime.start();
         if (record.persisted) await entry.runtime.resumeSession(record.session_id);
         else {
@@ -370,24 +398,24 @@ export class Bridge {
     const live = this.live.get(id)?.record;
     if (live) {
       if (!live.persisted) return { session_id: live.session_id, source: 'native-dsh-session-log', events: [], cursor: afterSeq, hasMore: false };
-      return readNativeEvents(this.home, live.session_id, afterSeq, limit);
+      return readNativeEvents(this.sessionHome(live), live.session_id, afterSeq, limit);
     }
     // Children are readable while their parent task still runs: the in-memory
     // children index covers records not yet persisted to the task file.
     for (const entry of this.live.values()) {
-      if (entry.record.children && id in entry.record.children) return readNativeEvents(this.home, id, afterSeq, limit);
+      if (entry.record.children && id in entry.record.children) return readNativeEvents(this.sessionHome(entry.record), id, afterSeq, limit);
     }
     try {
       const record = await this.read(id);
       if (!record.persisted) return { session_id: record.session_id, source: 'native-dsh-session-log', events: [], cursor: afterSeq, hasMore: false };
-      return readNativeEvents(this.home, record.session_id, afterSeq, limit);
+      return readNativeEvents(this.sessionHome(record), record.session_id, afterSeq, limit);
     } catch (error) {
       if (error.code !== 'ENOENT') throw error;
       // Not a bridge agent: may be a native child session of one. Children are
       // read-only observation targets recorded in their parent's task file.
       const owner = await this.childOwner(id);
       if (!owner) throw error;
-      return readNativeEvents(this.home, id, afterSeq, limit);
+      return readNativeEvents(this.sessionHome(owner), id, afterSeq, limit);
     }
   }
 
