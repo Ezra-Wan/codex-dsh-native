@@ -24,6 +24,18 @@ export function createCard({ app, doc = globalThis.document }) {
   let tasks = [];
 
   function applyStatus(status) {
+    // The wait result is also the async delivery path for a task's nativeUrl
+    // (the URL file lands after dispatch): fold it into the cache and re-bind
+    // the embed as soon as it belongs to the SELECTED task.
+    if (status?.agent_id) {
+      const cached = tasks.find(task => task.agent_id === status.agent_id);
+      if (cached) {
+        if (status.nativeUrl) cached.nativeUrl = status.nativeUrl;
+        else if (status.nativeUrl === undefined && cached.nativeUrl === undefined) { /* still pending */ }
+      }
+      if (status.agent_id === selected && status.nativeUrl) applyTaskBinding();
+      else if (status.agent_id === selected && status.nativeUrl === null) withdrawBinding();
+    }
     const bits = [LABELS[status.status] ?? status.status];
     if (status.children?.length) bits.push(`${status.children.length} 个子会话`);
     if (status.userTakeover) bits.push('用户接管中');
@@ -52,7 +64,22 @@ export function createCard({ app, doc = globalThis.document }) {
       mountOfficial(url);
       return true;
     }
+    withdrawBinding();
     return false;
+  }
+
+  // The selected task has no live URL (pending first collection, or its
+  // runtime was released): the previous task's page must NOT stay on screen
+  // under the new selection — withdraw to an explicit waiting state.
+  function withdrawBinding() {
+    const frame = $('frame');
+    if (frame.style.display === 'none') return;
+    frame.style.display = 'none';
+    delete frame.dataset.mounted;
+    $('open').removeAttribute('href');
+    $('fallback').style.display = 'block';
+    const heading = $('fallback').querySelector('.hint');
+    if (heading) heading.textContent = '该任务的官方界面尚未就绪（执行进程启动后自动接入；已释放的任务在续接后重新接入）。';
   }
 
   function renderFallback(message) {
@@ -101,6 +128,25 @@ export function createCard({ app, doc = globalThis.document }) {
 
   function receive(data) {
     const items = data.items ?? (data.agent_id ? [data] : []);
+    const soloDispatch = !Array.isArray(data.items) && data.agent_id ? data : null;
+    if (soloDispatch) {
+      // A dispatch/followup result for ONE task carries this card's ownership:
+      // it selects that task (the global list never overrides it afterwards).
+      if (selected !== soloDispatch.agent_id) {
+        selected = soloDispatch.agent_id;
+        core.switchTask();
+        $('state').textContent = '';
+        $('state').removeAttribute('title');
+      }
+      const cached = tasks.find(task => task.agent_id === soloDispatch.agent_id);
+      if (cached) {
+        if (soloDispatch.nativeUrl) cached.nativeUrl = soloDispatch.nativeUrl;
+      } else tasks.push(soloDispatch);
+      $('tasks').value = selected;
+      core.observeStatus(soloDispatch);
+      applyTaskBinding();
+      return;
+    }
     if (items.length) {
       tasks = items;
       const fresh = selected ?? items.at(-1).agent_id;
