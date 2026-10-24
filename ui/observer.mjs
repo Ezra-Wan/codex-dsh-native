@@ -9,6 +9,7 @@
 // test/observer-wiring.test.mjs with a fake app host and minimal DOM.
 import { App } from '@modelcontextprotocol/ext-apps';
 import { createObserverCore, TERMINAL } from './observer-core.mjs';
+import { APP_OPTIONS, configureCardLayout } from './layout.mjs';
 
 const LABELS = { starting: '启动中', running: '运行中', stopping: '停止中', completed: '已完成', completed_with_warnings: '完成·有异常', failed: '失败', interrupted: '已中断' };
 
@@ -203,6 +204,7 @@ export function createCard({ app, doc = globalThis.document }) {
   async function start() {
     try {
       await app.connect();
+      configureCardLayout({ app, doc });
       const initial = await app.callServerTool({ name: 'ds_bridge', arguments: {} });
       receive(parse(initial));
       // Single paced loop with controller-tested discipline (observer-core).
@@ -217,7 +219,7 @@ export function createCard({ app, doc = globalThis.document }) {
 
 // Browser auto-boot only: tests import createCard with an injected doc/app.
 if (typeof document !== 'undefined' && typeof window !== 'undefined') {
-  const app = new App({ name: 'DSH observer container', version: '0.2.0' }, { availableDisplayModes: ['inline', 'fullscreen'] });
+  const app = new App({ name: 'DSH observer container', version: '0.2.1' }, { availableDisplayModes: ['inline', 'fullscreen'] }, APP_OPTIONS);
   const card = createCard({ app });
   app.ontoolresult = result => {
     try {
