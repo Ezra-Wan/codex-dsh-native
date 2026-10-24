@@ -6,9 +6,18 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { Bridge } from '../src/bridge.mjs';
 
 const run = promisify(execFile);
 const server = fileURLToPath(new URL('../src/server.mjs', import.meta.url));
+
+test('port allocation fails before emitting an out-of-range overlay', () => {
+  const bridge = new Bridge({ root: tmpdir(), webEmbedBasePort: 65533 });
+  assert.equal(bridge.nextWebPort(), 65534);
+  assert.equal(bridge.nextWebPort(), 65535);
+  assert.throws(() => bridge.nextWebPort(), /Web port range exhausted/);
+  assert.equal(bridge.portCursor, 2, 'exhaustion does not mutate the allocation cursor');
+});
 
 test('server accepts an isolated web port range and rejects invalid configuration before initialization', async t => {
   const root = await mkdtemp(join(tmpdir(), 'dsh-server-config-'));
