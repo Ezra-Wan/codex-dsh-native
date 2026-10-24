@@ -1,6 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createCard } from '../ui/observer.mjs';
+import { Bridge } from '../src/bridge.mjs';
+import { mkdtemp, rm, mkdir, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 // Wiring tests for the observer card (cycle-discipline-review): execute the
 // real interface module — import createCard, inject a fake MCP app host and a
@@ -260,4 +264,115 @@ test('a solo dispatch result takes card ownership away from the initial default 
   assert.equal(doc.byId.get('tasks').value, 'aaaaaaaa-0000-0000-0000-000000000001', 'dispatch owns the selection');
   assert.equal(doc.byId.get('frame').dataset.mounted, dispatchA, 'embed bound to the dispatched task');
   card.core.stop();
+});
+
+test('revocation closes the loop across bridge and card: null clears cache, withdraws, never remounts', async t => {
+  const root = await mkdtemp(join(tmpdir(), 'revoke-loop-'));
+  const pending = [];
+  const instances = new Map();
+  let bridge;
+  let card;
+  t.after(async () => {
+    card?.core.stop();
+    for (const request of pending.splice(0)) request.resume();
+    await new Promise(resolve => setImmediate(resolve));
+    await bridge?.close();
+    await rm(root, { recursive: true, force: true });
+  });
+  const until = async (predicate, description) => {
+    const deadline = Date.now() + 5000;
+    while (!(await predicate())) {
+      assert.ok(Date.now() < deadline, description);
+      await new Promise(resolve => setTimeout(resolve, 10));
+    }
+  };
+  // Real Bridge and real card: replies are held until a lifecycle transition,
+  // then returned through ds_wait. No direct card.receive for the revocation.
+  const create = (record, options = {}) => {
+    const runtime = {
+      closed: false, patches: options.patches ?? [], options,
+      start: async () => {},
+      session: id => ({ getWorkingDirectory: async () => ({}) }),
+      resumeSession: async () => {},
+      run: () => new Promise((resolve, reject) => {
+        runtime.reject = reject;
+        runtime.finish = () => resolve({ finalResponse: 'done', events: [{ type: 'turn/end', data: { reason: { kind: 'completed' } } }] });
+      }),
+      close: async () => { runtime.closed = true; runtime.reject?.(new Error('closed')); },
+    };
+    const generations = instances.get(record.agent_id) ?? [];
+    generations.push(runtime);
+    instances.set(record.agent_id, generations);
+    return runtime;
+  };
+  await mkdir(join(root, 'dsh-home', 'profiles'), { recursive: true });
+  bridge = await new Bridge({ root, runtimeFactory: create, idleMs: 60_000, webEmbedBasePort: 8870 }).init();
+  await bridge.setEnabled(true);
+  const taskA = await bridge.start({ cwd: root, task: 'revoke A', permission: 'read-only' });
+  const taskB = await bridge.start({ cwd: root, task: 'switch B', permission: 'read-only' });
+  const ready = async (task, generation = 0) => {
+    await until(() => instances.get(task.agent_id)?.[generation]?.finish, 'fake runtime must reach run');
+    return instances.get(task.agent_id)[generation];
+  };
+  const publishUrl = async (task, url) => {
+    const record = await bridge.read(task.agent_id);
+    await writeFile(record.webUrlFile, JSON.stringify({ url, pid: 1 }));
+    await until(async () => (await bridge.status(task.agent_id)).nativeUrl === url, 'bridge must collect the generation URL');
+  };
+  const runtimeA = await ready(taskA);
+  await ready(taskB);
+  const urlA1 = 'http://127.0.0.1:8871/?token=synthetic-a1';
+  const urlA2 = 'http://127.0.0.1:8871/?token=synthetic-a2';
+  const urlB = 'http://127.0.0.1:8872/?token=synthetic-b';
+  await publishUrl(taskA, urlA1);
+  await publishUrl(taskB, urlB);
+  const doc = fakeDom();
+  const app = fakeApp();
+  const summaries = [];
+  app.callServerTool = async ({ name, arguments: args }) => {
+    app.calls.push({ name, args });
+    if (name === 'ds_bridge') {
+      return { structuredContent: await bridge.list() };
+    }
+    assert.equal(name, 'ds_wait');
+    await new Promise(resume => pending.push({ resume }));
+    const status = await bridge.wait(args.agent_id, 0);
+    summaries.push(status);
+    return { structuredContent: status };
+  };
+  card = createCard({ app, doc });
+  card.receive(await bridge.status(taskA.agent_id));
+  await card.start();
+  assert.equal(doc.byId.get('frame').dataset.mounted, urlA1, 'live URL mounted');
+
+  // Complete + release: the REAL summary must carry the explicit revocation.
+  runtimeA.finish();
+  await bridge.live.get(taskA.agent_id).done;
+  await bridge.release(taskA.agent_id);
+  const revokedSummary = await bridge.status(taskA.agent_id);
+  assert.equal(revokedSummary.nativeUrl, null, 'bridge summary carries explicit null after release');
+  const pumpUntil = async (predicate) => until(async () => {
+    for (const request of pending.splice(0)) request.resume();
+    return predicate();
+  }, 'real ds_wait reply must update the card');
+  await pumpUntil(() => summaries.some(status => status.agent_id === taskA.agent_id && status.nativeUrl === null)
+    && doc.byId.get('frame').style.display === 'none');
+  assert.equal(doc.byId.get('frame').style.display, 'none', 'revocation withdraws the page');
+  assert.equal(doc.byId.get('frame').dataset.mounted, undefined, 'mount cleared');
+  // Round-trip away and back: the dead URL must not remount from cache.
+  const select = doc.byId.get('tasks');
+  select.value = taskB.agent_id;
+  select.dispatch('change');
+  assert.equal(doc.byId.get('frame').dataset.mounted, urlB, 'B remains independently observable');
+  select.value = taskA.agent_id;
+  select.dispatch('change');
+  assert.equal(doc.byId.get('frame').style.display, 'none', 'A/B round-trip does not revive the revoked URL');
+
+  // Cold followup: a NEW generation URL arrives through the wait path.
+  const followup = await bridge.followup(taskA.agent_id, 'again');
+  card.receive(followup);
+  await ready(taskA, 1);
+  await publishUrl(taskA, urlA2);
+  await pumpUntil(() => doc.byId.get('frame').dataset.mounted === urlA2);
+  assert.equal(doc.byId.get('frame').dataset.mounted, urlA2, 'new generation remounts via ds_wait');
 });

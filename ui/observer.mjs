@@ -24,17 +24,17 @@ export function createCard({ app, doc = globalThis.document }) {
   let tasks = [];
 
   function applyStatus(status) {
-    // The wait result is also the async delivery path for a task's nativeUrl
-    // (the URL file lands after dispatch): fold it into the cache and re-bind
-    // the embed as soon as it belongs to the SELECTED task.
-    if (status?.agent_id) {
+    // The wait result is the async delivery path for a task's nativeUrl.
+    // Protocol: webEmbed tasks always carry nativeUrl (string = live, null =
+    // revoked/not-yet-collected). null must CLEAR the cache too — a cached
+    // dead URL would remount on the next A/B round-trip.
+    if (status?.agent_id && status.nativeUrl !== undefined) {
       const cached = tasks.find(task => task.agent_id === status.agent_id);
-      if (cached) {
-        if (status.nativeUrl) cached.nativeUrl = status.nativeUrl;
-        else if (status.nativeUrl === undefined && cached.nativeUrl === undefined) { /* still pending */ }
+      if (cached) cached.nativeUrl = status.nativeUrl;
+      if (status.agent_id === selected) {
+        if (status.nativeUrl) applyTaskBinding();
+        else withdrawBinding();
       }
-      if (status.agent_id === selected && status.nativeUrl) applyTaskBinding();
-      else if (status.agent_id === selected && status.nativeUrl === null) withdrawBinding();
     }
     const bits = [LABELS[status.status] ?? status.status];
     if (status.children?.length) bits.push(`${status.children.length} 个子会话`);
@@ -140,7 +140,7 @@ export function createCard({ app, doc = globalThis.document }) {
       }
       const cached = tasks.find(task => task.agent_id === soloDispatch.agent_id);
       if (cached) {
-        if (soloDispatch.nativeUrl) cached.nativeUrl = soloDispatch.nativeUrl;
+        if (soloDispatch.nativeUrl !== undefined) cached.nativeUrl = soloDispatch.nativeUrl;
       } else tasks.push(soloDispatch);
       $('tasks').value = selected;
       core.observeStatus(soloDispatch);

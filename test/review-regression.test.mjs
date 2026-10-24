@@ -163,7 +163,7 @@ test('the native URL is generation-scoped: release revokes it, cold followup re-
   await bridge.release(task.agent_id);
   // Release killed the process: the URL must be revoked, not served as live.
   const afterRelease = await bridge.status(task.agent_id);
-  assert.equal(afterRelease.nativeUrl, undefined, 'stale token revoked on release');
+  assert.equal(afterRelease.nativeUrl, null, 'stale token explicitly revoked on release');
   // Cold followup rebuilds the runtime; its launch clears the URL file first,
   // so the new generation's adapter writes the new token afterwards.
   await bridge.followup(task.agent_id, 'continue');
