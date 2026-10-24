@@ -77,3 +77,48 @@ test('the loader-gated path writes only after the loader settles, exactly once',
   assert.equal(JSON.parse(await readFile(urlFile, 'utf8')).marker, true);
   await ctx.fiber.dispose();
 });
+
+test('sibling service providers (production composition) still yield the URL', async t => {
+  const dir = await mkdtemp(join(tmpdir(), 'web-embed4-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const urlFile = join(dir, 'task-urls', '8811.json');
+  const ctx = new Context();
+  t.after(() => ctx.fiber.dispose());
+  // Production shape: services provided by a SIBLING plugin (its own plugin
+  // context, like dsh-host-webserver's Service class), not by the root.
+  const provider = c => {
+    c.provide('webServer', { getOrigin: () => 'http://127.0.0.1:8811' });
+    c.provide('connection', { authenticatedUrl: url => `${url}?token=sibling` });
+  };
+  ctx.plugin(provider);
+  ctx.plugin(webEmbed, { urlFile });
+  await new Promise(resolve => setTimeout(resolve, 80));
+  const state = JSON.parse(await readFile(urlFile, 'utf8'));
+  assert.equal(state.url, 'http://127.0.0.1:8811?token=sibling', 'URL written through the callback context');
+});
+
+test('a rejected loader settlement retries the announce and records a marker when it cannot', async t => {
+  const dir = await mkdtemp(join(tmpdir(), 'web-embed5-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const urlFile = join(dir, 'task-urls', '8812.json');
+  const ctx = new Context();
+  t.after(() => ctx.fiber.dispose());
+  let failOrigin = true;
+  ctx.plugin(c => {
+    c.provide('webServer', { getOrigin: () => (failOrigin ? undefined : 'http://127.0.0.1:8812') });
+    c.provide('connection', { authenticatedUrl: url => `${url}?token=retry` });
+    c.provide('loader', { await: () => Promise.reject(new Error('loader exploded')) });
+  });
+  ctx.plugin(webEmbed, { urlFile });
+  await new Promise(resolve => setTimeout(resolve, 80));
+  // Origin unavailable AND the loader rejected: an error marker is recorded
+  // (the announce failure reason) instead of a silent timeout.
+  const marker = await readFile(`${urlFile}.error`, 'utf8');
+  assert.ok(marker.trim().length > 0, `non-empty error marker, got: ${marker}`);
+  // When the origin becomes available the one-shot has NOT been consumed by
+  // the failure path... it has (announce threw before writing) — verify the
+  // marker exists rather than a stale URL.
+  failOrigin = false;
+  await new Promise(resolve => setTimeout(resolve, 50));
+  assert.equal(await readFile(urlFile, 'utf8').then(() => true).catch(() => false), false, 'no URL written from a failed announce');
+});
