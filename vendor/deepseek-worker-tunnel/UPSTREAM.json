@@ -1,0 +1,23 @@
+{
+  "repository": "https://github.com/deepseek-ai/deepseek-harness",
+  "commit": "687f282e8625c6b8d11ff58211a90524be2e4317",
+  "license": "MIT",
+  "files": {
+    "LICENSE": {
+      "source": "LICENSE",
+      "sha256": "ebb4f09972aee8608be255debaf78451a68e95c290f55c240dec2ecfa16ea6be"
+    },
+    "client/client.ts": {
+      "source": "packages/experimental/webworker-runtime/src/client/client.ts",
+      "sha256": "ffe80ac12768a83e5634bb8c95cf3bda0b58b456c916811867ba8212a9082cc1"
+    },
+    "client/text-viewer.ts": {
+      "source": "packages/experimental/webworker-runtime/src/client/text-viewer.ts",
+      "sha256": "9c32f3f8a9ab1ac1b26cda11e7db254c5e844a93f4e0a2ef1b9060fa06cd81e8"
+    },
+    "transport/frames.ts": {
+      "source": "packages/experimental/webworker-runtime/src/transport/frames.ts",
+      "sha256": "bb0b16cd5c732cdd745b5b16fa1064c03016866fd27cc0be019bf77b4971d3d4"
+    }
+  }
+}
