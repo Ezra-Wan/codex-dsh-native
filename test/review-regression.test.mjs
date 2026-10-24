@@ -179,6 +179,26 @@ test('the native URL is generation-scoped: release revokes it, cold followup re-
   await bridge.wait(task.agent_id);
 });
 
+test('releasing a runtime drains its URL reader and ignores late announcements', async t => {
+  const { root, fake, bridge } = await setup(t);
+  await mkdir(join(bridge.home, 'profiles'), { recursive: true });
+  await bridge.setEnabled(true);
+  const task = await bridge.start({ cwd: root, task: 'no URL before release', permission: 'read-only' });
+  const runtime = await ready(fake);
+  const entry = bridge.live.get(task.agent_id);
+  let drained = false;
+  assert.ok(entry.urlWait, 'runtime started an asynchronous URL reader');
+  const reader = entry.urlWait.then(() => { drained = true; });
+  runtime.finish();
+  await entry.done;
+  await bridge.release(task.agent_id);
+  assert.equal(drained, true, 'release completes only after the URL reader stops');
+  await reader;
+  await writeFile(entry.record.webUrlFile, JSON.stringify({ url: 'http://127.0.0.1:8801/?token=synthetic-late', pid: 1 }));
+  await bridge.awaitWebUrl(entry, 500);
+  assert.equal((await bridge.status(task.agent_id)).nativeUrl, null, 'a dead generation cannot republish its URL');
+});
+
 test('web-embed tasks launch the sdk-web profile, pick up the adapter URL and clean it up', async t => {
   const { root, fake, bridge } = await setup(t);
   await bridge.setEnabled(true);

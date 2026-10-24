@@ -166,9 +166,13 @@ export class Bridge {
   // never fails the task itself.
   async awaitWebUrl(entry, timeoutMs = 20_000) {
     const record = entry.record;
-    for (let count = 0; count < timeoutMs / 500; count++) {
+    const generation = record.runtimeGeneration;
+    const current = () => !this.closing && !entry.releasing
+      && this.live.get(record.agent_id) === entry && record.runtimeGeneration === generation;
+    for (let count = 0; count < timeoutMs / 500 && current(); count++) {
       if (record.nativeUrlGeneration === record.runtimeGeneration) return;
       const state = await readFile(record.webUrlFile, 'utf8').then(JSON.parse).catch(() => null);
+      if (!current()) return;
       if (state?.url) {
         record.nativeUrl = state.url;
         record.nativeUrlGeneration = record.runtimeGeneration;
@@ -178,7 +182,7 @@ export class Bridge {
       }
       await new Promise(resolve => setTimeout(resolve, 500));
     }
-    record.progress.webEmbedMissed = record.webUrlFile;
+    if (current()) record.progress.webEmbedMissed = record.webUrlFile;
   }
 
   async followup(id, task) {
@@ -294,7 +298,9 @@ export class Bridge {
       // the web stack is live; pick it up without blocking the prompt. The
       // generation guard re-arms after release+followup rebuilt the runtime
       // (the new process mints a new token; the old URL is dead).
-      if (record.webEmbed && record.nativeUrlGeneration !== record.runtimeGeneration) void this.awaitWebUrl(entry);
+      if (record.webEmbed && record.nativeUrlGeneration !== record.runtimeGeneration && !entry.urlWait) {
+        entry.urlWait = this.awaitWebUrl(entry).finally(() => { entry.urlWait = null; });
+      }
       const runPromise = entry.runtime.run(task, {
         sessionId: record.session_id,
         onNotification: notification => {
@@ -495,6 +501,10 @@ export class Bridge {
   async release(id) {
     const entry = this.live.get(id);
     if (!entry || entry.busy) return;
+    // Stop and drain the producer before publishing revocation: a reader
+    // already awaiting disk must not save a dead generation's URL afterwards.
+    entry.releasing = true;
+    await entry.urlWait;
     clearTimeout(entry.timer);
     if (entry.runtime) {
       await entry.runtime.close();
