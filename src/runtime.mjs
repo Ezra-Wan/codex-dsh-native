@@ -1,6 +1,7 @@
 import { DeepSeekHarness } from '@deepseek-ai/dsh-sdk-client';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { WEB_RUNTIME_PATCH } from './web-profile.mjs';
 
 // Official minimal delegation setup from @deepseek-ai/dsh-subagent README:
 // service + in-process provider + model-facing tool. The sdk profile ships
@@ -29,6 +30,7 @@ export async function writeWebEmbedPatch(root, { port, urlFile }) {
   await mkdir(dir, { recursive: true });
   const path = join(dir, `web-embed-${port}.yaml`);
   const yaml = [
+    WEB_RUNTIME_PATCH.trimEnd(),
     `- id: webserver`,
     `  config:`,
     `    host: 127.0.0.1`,

@@ -10,6 +10,7 @@ import { constants } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
+import { WEB_RUNTIME_PATCH } from '../src/web-profile.mjs';
 
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const argIndex = process.argv.indexOf('--home');
@@ -25,7 +26,8 @@ const exists = path => access(path, constants.F_OK).then(() => true).catch(() =>
 const profileManifest = join(profileDir, 'package.json');
 if (await exists(profileManifest)) {
   await cp(join(root, 'adapter', 'web-embed'), join(profileDir, 'web-embed'), { recursive: true });
-  console.log('sdk-web profile present; adapter copy refreshed.');
+  await writeFile(join(profileDir, 'cordis.patch.yml'), WEB_RUNTIME_PATCH, 'utf8');
+  console.log('sdk-web profile present; adapter copy and browser settings refreshed.');
   process.exit(0);
 }
 if (!(await exists(join(profiles, 'web')))) {
@@ -63,16 +65,7 @@ await writeFile(join(profileDir, 'package.json'), JSON.stringify({
 
 await writeFile(join(profileDir, 'pnpm-workspace.yaml'), 'packages:\n  - ./web-embed\n');
 await writeFile(join(profileDir, 'cordis.yml'), '# dsh profile root — composed as patches (see the web profile note).\n[]\n');
-await writeFile(join(profileDir, 'cordis.patch.yml'), [
-  '# Bridge overlay for the sdk-web profile:',
-  '# - never open or print (stdout belongs to the SDK JSON-RPC protocol line;',
-  '#   the bridge learns the URL from @codex-dsh/web-embed instead)',
-  '# - the per-task webserver port is injected via a --patch overlay at launch.',
-  '- id: web-app',
-  '  config:',
-  '    openBrowser: false',
-  '    printUrl: false',
-].join('\n') + '\n');
+await writeFile(join(profileDir, 'cordis.patch.yml'), WEB_RUNTIME_PATCH, 'utf8');
 
 console.log('Installing sdk-web profile dependencies (pnpm install; no services started)...');
 const pnpm = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
