@@ -1,0 +1,11 @@
+{
+  "repository": "https://github.com/k2124732496-lab/DSH-for-Vscode",
+  "publication": "KAZUHA.dsh-for-vscode@0.2.0",
+  "license": "MIT",
+  "vsixSha256": "b0e4c91d02cdb92b7c2f2aec008c10c259e1d9562e3f0fa8a3806a6d2e16be92",
+  "files": {
+    "workspace-sync-client.js": "535405f32706ab65bb6bae0d869d9957ab3762d1e8bbf04f4e5338ecddb717fe",
+    "LICENSE": "7d6ee35bf8a552dd925ff7f116089b82f862e4f938f2d5b40b07d364aa72b361"
+  },
+  "adaptation": "ui/native-session-target.mjs selects an existing SessionTarget; no workspace or Session creation"
+}

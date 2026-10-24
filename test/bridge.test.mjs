@@ -59,6 +59,33 @@ test('off by default and disabled dispatch launches no native runtime', async t 
   assert.equal(fake.instances.length, 0);
 });
 
+test('native view leases retain their runtime, enforce capacity and release independently', async t => {
+  const {root,bridge,fake}=await setup(t);
+  bridge.maxParallel=1;
+  await bridge.setEnabled(true);
+  const task=await bridge.start({cwd:root,task:'retained',permission:'read-only',webEmbed:false});
+  const runtime=await ready(fake);
+  const releaseA=await bridge.retainView(task.agent_id), releaseB=await bridge.retainView(task.agent_id);
+  runtime.finish();await bridge.wait(task.agent_id);
+  await bridge.release(task.agent_id);
+  assert.equal(runtime.closed,false);
+  await assert.rejects(bridge.start({cwd:root,task:'cannot evict visible runtime',permission:'read-only',webEmbed:false}),/retained/);
+  await releaseA();await releaseA();
+  assert.equal(bridge.live.get(task.agent_id).viewCount,1,'a view lease releases only once');
+  await releaseB();
+  await bridge.release(task.agent_id);
+  assert.equal(runtime.closed,true);
+});
+
+test('explicit stop still closes a running task with a native view lease', async t => {
+  const {root,bridge,fake}=await setup(t);await bridge.setEnabled(true);
+  const task=await bridge.start({cwd:root,task:'running',permission:'read-only',webEmbed:false});
+  const runtime=await ready(fake), release=await bridge.retainView(task.agent_id);
+  await bridge.stop(task.agent_id);
+  assert.equal(runtime.closed,true);assert.equal(bridge.live.has(task.agent_id),false);
+  await release();
+});
+
 test('asynchronous tasks overlap, bounded waits stay pending and capacity is enforced', async t => {
   const { root, bridge, fake } = await setup(t);
   await bridge.setEnabled(true);

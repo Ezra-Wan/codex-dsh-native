@@ -4,6 +4,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 import { Bridge } from './bridge.mjs';
+import { registerNativeTaskUi, bridgeTaskResolver, NATIVE_TASK_URI } from './native-task-ui.mjs';
 
 const root = process.env.CODEX_DSH_BRIDGE_HOME ?? fileURLToPath(new URL('../.local/', import.meta.url));
 const webEmbedBasePort = Number(process.env.CODEX_DSH_WEB_BASE_PORT ?? 8800);
@@ -11,6 +12,7 @@ if (!Number.isInteger(webEmbedBasePort) || webEmbedBasePort < 1024 || webEmbedBa
   throw new Error('CODEX_DSH_WEB_BASE_PORT must be an integer between 1024 and 65533.');
 }
 const bridge = await new Bridge({ root, webEmbedBasePort }).init();
+const nativeMcpUi = process.env.CODEX_DSH_UI === 'mcp';
 const arg = process.argv[2];
 if (arg) {
   if (arg === '--enable' || arg === '--disable') console.log(JSON.stringify(await bridge.setEnabled(arg === '--enable')));
@@ -29,8 +31,13 @@ if (arg) {
     }
   });
   const agent = z.string().uuid().describe('Retain the ID returned by ds_start; followups reuse it.');
-  const resourceUri = 'ui://dsh-native/observer.html';
-  server.registerResource('dsh-observer', resourceUri, { title: 'DSH 执行记录', mimeType: 'text/html;profile=mcp-app' }, async () => ({
+  const resourceUri = nativeMcpUi ? NATIVE_TASK_URI : 'ui://dsh-native/observer.html';
+  const nativeUi = nativeMcpUi ? registerNativeTaskUi(server, {
+    resolveTask: bridgeTaskResolver(bridge),
+    retainView: id => bridge.retainView(id),
+    listTasks: async () => (await bridge.list()).items,
+  }) : null;
+  if (!nativeMcpUi) server.registerResource('dsh-observer', resourceUri, { title: 'DSH 执行记录', mimeType: 'text/html;profile=mcp-app' }, async () => ({
     contents: [{ uri: resourceUri, mimeType: 'text/html;profile=mcp-app',
       text: await readFile(new URL('../dist/observer.html', import.meta.url), 'utf8'),
       // MCP Apps blocks nested frames by default. Only allow the loopback
@@ -97,6 +104,7 @@ if (arg) {
   const close = async () => {
     if (exiting) return;
     exiting = true;
+    nativeUi?.close();
     await bridge.close();
     await server.close();
   };
@@ -108,5 +116,5 @@ if (arg) {
   // first open is ready. Failure only degrades the card to its fallback.
   // DSH_NATIVE_REPLAY=off keeps tests (and other side-effect-free embedders)
   // from ever spawning the local web process.
-  if (process.env.DSH_NATIVE_REPLAY !== 'off') bridge.ensureNativeReplay().catch(() => {});
+  if (!nativeMcpUi && process.env.DSH_NATIVE_REPLAY !== 'off') bridge.ensureNativeReplay().catch(() => {});
 }
