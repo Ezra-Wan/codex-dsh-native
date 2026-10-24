@@ -55,7 +55,7 @@ export function createCard({ app, doc = globalThis.document }) {
   // The selected task's own executing-process UI (S2 binding): each web-embed
   // task serves the official UI from ITS OWN process, so switching tasks is
   // switching URLs — click A shows A, switch B shows B, no shared state to
-  // cross. Falls back to the global native-replay URL, then the fallback panel.
+  // cross. Legacy summaries without URL state can still use global replay.
   function applyTaskBinding() {
     if (!selected) return false;
     const status = tasks.find(task => task.agent_id === selected);
@@ -73,7 +73,6 @@ export function createCard({ app, doc = globalThis.document }) {
   // under the new selection — withdraw to an explicit waiting state.
   function withdrawBinding() {
     const frame = $('frame');
-    if (frame.style.display === 'none') return;
     frame.style.display = 'none';
     delete frame.dataset.mounted;
     $('open').removeAttribute('href');
@@ -176,10 +175,12 @@ export function createCard({ app, doc = globalThis.document }) {
       // Prefer this task's own executing-process UI; the nativeReplay field
       // below only decides when the task carries no per-task URL.
       if (applyTaskBinding()) return;
+      // Explicit null belongs to a task-scoped view that is pending/revoked.
+      // The global replay can contain other sessions; it is not this task.
+      if (status && Object.hasOwn(status, 'nativeUrl')) return;
     }
-    // Layout authority is the nativeReplay field ONLY: a bare task summary
-    // (ds_observe / ds_wait) carries no replay state and must not flip the
-    // card into fallback after the official UI has mounted.
+    // Shared replay is a fallback for legacy summaries only. A bare result
+    // without nativeReplay must not change an already mounted view.
     if ('nativeReplay' in data) {
       const replay = data.nativeReplay;
       if (replay && replay.running !== false) mountOfficial(replay.url);
