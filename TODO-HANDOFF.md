@@ -2,7 +2,7 @@
 
 ## 下一轮执行单：先打通实际会话的原生正文流
 
-2026-10-24 收敛。**本节决定下一轮交付顺序**；下节保留完整产品要求，后文轮次记录仅供追溯。当前基线 `222e567`：卡片接线、观察限速/退避、旧响应丢弃返修通过，构建及 33/33 离线测试通过。验收证据在 `.local/wiring-fix-review-20261024/REVIEW.md`。该目录不随克隆分发，关键结论已写在本节，不要求新环境依赖该目录。
+2026-10-24 收敛。**本节决定下一轮交付顺序**；下节保留完整产品要求，后文轮次记录仅供追溯。当前代码基线 `c9ed37b`：原有观察循环返修及 four-fix-review 三项离线返修完成，构建和 **57/57 离线测试通过**。关键验收边界已写在本节，不依赖不随克隆分发的 `.local` 报告。真实正文流、官方界面自动选中目标会话及 Codex 宿主表现仍未验收。
 
 **下一轮唯一主目标：Codex 展开所选任务后，在该任务回答结束前，DSH 官方界面的正文持续增长。** 当前尚未实现，不是只等重载。事件等待、状态徽章、悬停文字和已提交日志不能作为这项目标的替代交付。
 
@@ -10,17 +10,21 @@
 
 - [x] 源码核对完成（`docs/s1-stream-design.md` 汇总）：独立 replay 进程拿不到瞬态帧（进程内性）；SDK stdio 不转发流帧；token 唯一出口是进程内 `authenticatedUrl()`。
 - [x] 最小方案落地：**sdk-web profile**（dsh-base+dsh-sdk-app+dsh-web-app，同版本叠加无 fork）——执行进程自身成为官方 UI 宿主，session-controller 与执行同体，follow 流直收瞬态帧；`@codex-dsh/web-embed` 薄插件（~40 行自有代码）进程内落盘带 token URL；桥按任务分配端口 8801+、生成 overlay、采集 `record.nativeUrl`。相对协议改造路径的改动面对比见设计文档。
-- [x] **s1-s2-acceptance 四断点返修（2026-10-24 四次，HEAD 228906c）**：①插件按真实 cordis 契约 `apply(ctx,config)`（旧版读 `ctx.config` 在真实加载器必炸）+ 真实 cordis 加载测试三场景；profile 依赖改 `link:` 且 init 幂等刷新副本。②`nativeUrl` 按运行时世代管理（release 撤销死 token、冷续接重采新世代，两世代回归）。③卡片消费 ds_wait 结果中的异步 nativeUrl 即时换源、无 URL 任务显式撤旧页、单任务派发结果接管归属（接线测试三场景）。④**任务级 DSH_HOME**：web-embed 任务独享 `task-homes/<id>`（sessions 私有→该任务会话是官方 UI 列表唯一——接收方选择契约由容器范围保证；profiles junction 复用共享安装；跨 release 存活供冷续接）。
+- [x] **s1-s2-acceptance 基础返修**：插件配置改为 `apply(ctx,config)`；profile 使用 `link:`；桥按世代重新采集 URL；卡片消费异步 URL。web-embed 任务使用私有 `task-homes/<id>/sessions`，profiles junction 复用共享安装，任务 home 跨 release 存活。这里只证明历史隔离，不能推导官方界面会自动选中目标根会话。
+- [x] **four-fix-review 三项离线返修完成**：①使用注入上下文 `connectionCtx.webServer`，真实 Cordis 同级 provider 测试通过（`9e167d2`）。②webEmbed 摘要恒带 `nativeUrl: string|null`；null 同时清卡片缓存与撤页；真实 Bridge → `ds_wait` → 实际卡片交叉测试覆盖 A/B 往返、冷续接第二世代 URL 重挂（`a8e5d59`）。③列表与单任务派发共用物理 option 同步，新增任务可从下拉选项选择（`2626611`）。世代测试等待假运行时真正启动后才模拟插件写 URL，不再把启动清理文件的竞态当成产品失败（`26028a5`）。
+- [x] **额外发现并修复的生命周期/弹页缺陷**：release 停止并等待旧世代 URL 读取器退出，禁止后台回写复活失效 URL（`43d4104`）；显式 null 的未就绪任务保持等待，不能临时展示全局其他会话（`10175fd`）。自动弹页关闭项原误用插件名 `web-app`，实际条目 ID 是 `web-runtime`；已在 profile 和每任务 overlay 都正确关闭 `openBrowser/printUrl`，旧 profile 的 init 刷新也更新该覆盖（`58c3945`）。测试使用上游补丁合成器、实际配置 schema 与运行时胶水验证，未实际启动服务或浏览器。
 - [x] 原生语义保留：原生工具/会话身份/工作区/压缩/父子语义不变；正文由官方界面消费；attempt/revision、settlement、重连 baseline 语义由官方实现承担并以契约测试锁定。
-- [x] 离线验证覆盖实际适配代码与官方折叠契约：插件真实加载器测试（URL 写出/loader 门控/一次性/坏配置无副作用）、折叠四场景（依次可见/结算/中断退役/重连重建/隔离）、桥世代/任务 home/卡片异步绑定。测试 49/49。
+- [x] 离线验证覆盖实际适配代码与官方折叠契约：插件真实加载器、同级服务 provider、上游折叠器、桥世代/任务 home、实际卡片异步 URL 与撤销闭环、物理下拉选项、上游 profile 覆盖。测试 **57/57**，不等于真实流端到端已通过。
+- [ ] 插件失败标记诊断：插件会写 `<urlFile>.error`，但桥目前未消费该标记，仍按采集超时降级；不能声称桥已能区分插件失败与超时。
 - [ ] **S3 窗口首验**（不变）：sdk+web 同进程实跑；真实长回复结束前多次正文增长；宿主内 iframe 承载任务级 URL；A/B 双进程实测。已知边界：任务级 home 使全局 native-replay 看不到 web-embed 任务会话（其观察走任务卡片；全局回放服务旧任务/非 embed 任务）。
 
 交付（本轮）：`adapter/web-embed`、`scripts/init-sdk-web-profile.mjs`、bridge/runtime 接线、卡片按任务绑定、官方折叠契约测试、四断点返修、设计文档。
 
 ### S2：绑定所选会话，接入现有任务卡片
 
-- [x] **有接收方实现的会话选择通道**（2026-10-24，四次返修后）：接收方 = 该任务 sdk-web 执行进程 + **任务级 DSH_HOME**——该进程的官方 UI 列表中只有本任务会话（sessions 私有），"选中目标会话"由容器范围保证而非端口/token 差异；卡片挂所选任务 nativeUrl、单任务派发结果接管归属、无 URL 撤旧页；`#session=` 假通道已删。
-- [x] 空列表后首次派发/切换期间旧响应/收起再展开：旧响应丢弃由观察循环 seq 机制承担；重新连接由官方 Web 自身重连 + URL 世代管理承担（窗口实测）。
+- [x] **任务范围隔离与卡片路由的离线接线**：任务级 DSH_HOME 隔离持久历史；卡片挂所选任务 URL、单任务结果接管归属、异步 URL 到达后换源，null 撤页并清缓存，选项同步覆盖新派发任务；`#session=` 假通道已删。
+- [x] 离线覆盖旧响应丢弃、撤销后的 A/B 往返、同 session 冷续接的新 URL 重挂；由官方连接承担的真实重连、收起再展开表现尚未实测。
+- [ ] **官方接收端选中目标根会话**：确认打开任务 URL 后实际选中的 session_id 与派发一致；不能从 task-home 目录隔离或 iframe.src 不同直接推导。未自动选中则仍需实现官方接收方契约，不能只标“待窗口”。
 - [ ] S3 窗口：宿主内 iframe 承载 loopback+token URL 的实际表现；A/B 双任务级 home 切换实测。
 
 ### S3：隔离实验窗口验收，取得真实正文增长证据
