@@ -179,3 +179,85 @@ test('S2 fallback: tasks without per-task URLs defer to the global nativeReplay'
   assert.equal(doc.byId.get('frame').dataset.mounted, globalUrl, 'global replay URL used when the task has none');
   card.core.stop();
 });
+
+test('async nativeUrl from a wait result re-binds the embed to the task UI', async () => {
+  const doc = fakeDom();
+  const app = fakeApp();
+  const globalUrl = 'http://127.0.0.1:8792/?token=global';
+  const taskUrl = 'http://127.0.0.1:8801/?token=task';
+  const agentId = 'aaaaaaaa-0000-0000-0000-000000000001';
+  let waitCount = 0;
+  app.callServerTool = async ({ name, arguments: args }) => {
+    app.calls.push({ name, args });
+    if (name === 'ds_bridge') return { structuredContent: { enabled: true, items: [{ agent_id: agentId, name: '任务A', status: 'running' }], nativeReplay: { url: globalUrl, running: true } } };
+    if (name === 'ds_wait') {
+      waitCount++;
+      // First wait: no task URL yet (global replay shown); second wait carries it.
+      return { structuredContent: waitCount === 1
+        ? { status: 'running', agent_id: agentId, recentActions: [] }
+        : { status: 'running', agent_id: agentId, nativeUrl: taskUrl, recentActions: [] } };
+    }
+    throw new Error('unexpected');
+  };
+  const card = createCard({ app, doc });
+  await card.start();
+  assert.equal(doc.byId.get('frame').dataset.mounted, globalUrl, 'starts on the global replay URL');
+  // The paced loop's next wait delivers the task URL: the embed must switch.
+  await new Promise(resolve => setTimeout(resolve, 1200));
+  assert.equal(doc.byId.get('frame').dataset.mounted, taskUrl, 'async task URL re-binds the embed');
+  card.core.stop();
+});
+
+test('switching to a task with no live URL withdraws the previous task page', async () => {
+  const doc = fakeDom();
+  const app = fakeApp();
+  const urlA = 'http://127.0.0.1:8801/?token=a';
+  app.callServerTool = async ({ name, arguments: args }) => {
+    app.calls.push({ name, args });
+    if (name === 'ds_bridge') return { structuredContent: { enabled: true, items: [
+      { agent_id: 'aaaaaaaa-0000-0000-0000-000000000001', name: '任务A', status: 'running', nativeUrl: urlA },
+      { agent_id: 'bbbbbbbb-0000-0000-0000-000000000002', name: '任务B', status: 'starting' },
+    ] } };
+    if (name === 'ds_wait') return new Promise(() => {});
+    throw new Error('unexpected');
+  };
+  const card = createCard({ app, doc });
+  await card.start();
+  // Default selection is B (last item, no URL yet): explicit waiting state.
+  assert.equal(doc.byId.get('fallback').style.display, 'block');
+  // Switch to A: its live URL mounts.
+  const select = doc.byId.get('tasks');
+  select.value = 'aaaaaaaa-0000-0000-0000-000000000001';
+  select.dispatch('change');
+  assert.equal(doc.byId.get('frame').src, urlA);
+  // Switch back to B: A's page must be withdrawn, not left under B's tab.
+  select.value = 'bbbbbbbb-0000-0000-0000-000000000002';
+  select.dispatch('change');
+  assert.equal(doc.byId.get('frame').style.display, 'none', 'old task page withdrawn');
+  assert.equal(doc.byId.get('frame').dataset.mounted, undefined, 'stale mount cleared');
+  assert.equal(doc.byId.get('fallback').style.display, 'block', 'explicit waiting state shown');
+  card.core.stop();
+});
+
+test('a solo dispatch result takes card ownership away from the initial default selection', async () => {
+  const doc = fakeDom();
+  const app = fakeApp();
+  const dispatchA = 'http://127.0.0.1:8805/?token=a-dispatch';
+  app.callServerTool = async ({ name, arguments: args }) => {
+    app.calls.push({ name, args });
+    if (name === 'ds_bridge') return { structuredContent: { enabled: true, items: [
+      { agent_id: 'cccccccc-0000-0000-0000-000000000003', name: '旧任务C', status: 'completed' },
+      { agent_id: 'dddddddd-0000-0000-0000-000000000004', name: '旧任务D', status: 'completed' },
+    ], nativeReplay: { url: 'http://127.0.0.1:8792/?token=g', running: true } } };
+    if (name === 'ds_wait') return new Promise(() => {});
+    throw new Error('unexpected');
+  };
+  const card = createCard({ app, doc });
+  await card.start();
+  // Default selection is the LAST item (D). The dispatch result for A arrives.
+  assert.equal(doc.byId.get('tasks').value, 'dddddddd-0000-0000-0000-000000000004');
+  card.receive({ agent_id: 'aaaaaaaa-0000-0000-0000-000000000001', status: 'running', nativeUrl: dispatchA, name: '任务A' });
+  assert.equal(doc.byId.get('tasks').value, 'aaaaaaaa-0000-0000-0000-000000000001', 'dispatch owns the selection');
+  assert.equal(doc.byId.get('frame').dataset.mounted, dispatchA, 'embed bound to the dispatched task');
+  card.core.stop();
+});
