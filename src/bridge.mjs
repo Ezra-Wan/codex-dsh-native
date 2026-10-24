@@ -138,10 +138,12 @@ export class Bridge {
   // never fails the task itself.
   async awaitWebUrl(entry, timeoutMs = 20_000) {
     const record = entry.record;
-    for (let count = 0; count < timeoutMs / 500 && !record.nativeUrl; count++) {
+    for (let count = 0; count < timeoutMs / 500; count++) {
+      if (record.nativeUrlGeneration === record.runtimeGeneration) return;
       const state = await readFile(record.webUrlFile, 'utf8').then(JSON.parse).catch(() => null);
       if (state?.url) {
         record.nativeUrl = state.url;
+        record.nativeUrlGeneration = record.runtimeGeneration;
         record.updatedAt = new Date().toISOString();
         await this.save(record).catch(() => {});
         return;
@@ -240,6 +242,9 @@ export class Bridge {
           await rm(urlFile, { force: true });
           patches = [...patches, await writeWebEmbedPatch(this.root, { port: record.webPort, urlFile })];
           record.webUrlFile = urlFile;
+          // A NEW runtime generation mints a NEW in-process token; any URL
+          // from a previous generation is stale the moment its process died.
+          record.runtimeGeneration = (record.runtimeGeneration ?? 0) + 1;
         }
         entry.runtime = this.runtimeFactory(record, { home: this.home, patches, ...(record.webEmbed ? { profile: 'sdk-web' } : {}) });
         await entry.runtime.start();
@@ -258,8 +263,10 @@ export class Bridge {
       // for interruption instead of outliving the closer's runtime.close().
       if (entry.cancel) throw new Error('Interrupted before prompt');
       // The in-process adapter writes the authenticated official-UI URL once
-      // the web stack is live; pick it up without blocking the prompt.
-      if (record.webEmbed && !record.nativeUrl) void this.awaitWebUrl(entry);
+      // the web stack is live; pick it up without blocking the prompt. The
+      // generation guard re-arms after release+followup rebuilt the runtime
+      // (the new process mints a new token; the old URL is dead).
+      if (record.webEmbed && record.nativeUrlGeneration !== record.runtimeGeneration) void this.awaitWebUrl(entry);
       const runPromise = entry.runtime.run(task, {
         sessionId: record.session_id,
         onNotification: notification => {
@@ -464,6 +471,14 @@ export class Bridge {
       await this.save(entry.record).catch(() => {});
     }
     if (entry.record.webUrlFile) await rm(entry.record.webUrlFile, { force: true }).catch(() => {});
+    // The runtime generation is dead: its in-process token died with it. The
+    // next followup re-arms collection (generation guard); until then the
+    // summary must not present the stale URL as a live view.
+    if (entry.record.webEmbed) {
+      entry.record.nativeUrl = null;
+      entry.record.updatedAt = new Date().toISOString();
+      await this.save(entry.record).catch(() => {});
+    }
     await entry.release();
     this.live.delete(id);
   }
