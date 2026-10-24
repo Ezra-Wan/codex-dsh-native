@@ -28,15 +28,33 @@ export function apply(ctx, config) {
     let announced = false;
     const announce = () => {
       if (announced) return;
-      const origin = ctx.webServer?.getOrigin?.();
-      if (!origin) return;
+      // Services are injected onto the CALLBACK context. A sibling provider
+      // (how dsh-host-webserver actually mounts — a Service plugin in its own
+      // plugin context) is NOT reachable through the outer plugin ctx: reading
+      // ctx.webServer there throws "cannot get property webServer without
+      // inject" in real compositions.
+      const origin = connectionCtx.webServer?.getOrigin?.();
+      if (!origin) throw new Error('@codex-dsh/web-embed: webServer.getOrigin unavailable after injection');
       const authenticated = connectionCtx.connection.authenticatedUrl(origin);
       mkdirSync(dirname(urlFile), { recursive: true });
       writeFileSync(urlFile, JSON.stringify({ url: authenticated, pid: process.pid, writtenAt: new Date().toISOString() }, null, 2) + '\n');
       announced = true;
     };
     const loader = connectionCtx.get('loader');
-    if (loader?.await) Promise.resolve(loader.await()).then(announce).catch(() => {});
-    else announce();
+    if (loader?.await) {
+      // A rejected loader settlement must not silently swallow the announce:
+      // retry once so a healthy stack still writes the URL, and surface a
+      // marker file when it truly cannot (the bridge reads it as a miss).
+      Promise.resolve(loader.await())
+        .then(announce)
+        .catch(() => {
+          try { announce(); } catch (error) {
+            try {
+              mkdirSync(dirname(urlFile), { recursive: true });
+              writeFileSync(`${urlFile}.error`, String(error?.message ?? error));
+            } catch { /* the bridge times out and degrades */ }
+          }
+        });
+    } else announce();
   });
 }
