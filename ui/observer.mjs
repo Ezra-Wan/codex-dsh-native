@@ -27,6 +27,8 @@ function renderFallback(message) {
   if (message) { $('notice').style.display = 'block'; $('notice').textContent = message; }
   const rows = $('rows');
   rows.replaceChildren();
+  const heading = $('fallback').querySelector('.hint');
+  if (heading) heading.textContent = message ? '暂显示任务状态：' : '官方界面未运行（npm run native-replay），暂显示任务状态：';
   for (const task of tasks) {
     const row = document.createElement('div');
     row.className = 'row';
@@ -43,7 +45,14 @@ function renderFallback(message) {
 }
 
 function mountOfficial(url) {
+  // Restore the embed explicitly: a later fallback must never leave the
+  // frame hidden once a valid URL arrives, in either arrival order.
+  $('fallback').style.display = 'none';
+  $('frame').style.display = 'block';
+  $('notice').style.display = 'none';
   const frame = $('frame');
+  if (frame.dataset.mounted === url) return;
+  frame.dataset.mounted = url;
   let loaded = false;
   frame.addEventListener('load', () => { loaded = true; }, { once: true });
   frame.src = url;
@@ -82,9 +91,14 @@ async function receive(result) {
     $('tasks').value = selected;
     void refreshSelected();
   }
-  const replay = data.nativeReplay;
-  if (replay && replay.running !== false) mountOfficial(replay.url);
-  else renderFallback(replay ? '官方界面进程已退出，可重启：npm run native-replay' : null);
+  // Layout authority is the nativeReplay field ONLY: a bare task summary
+  // (ds_observe / ds_wait) carries no replay state and must not flip the
+  // card into fallback after the official UI has mounted.
+  if ('nativeReplay' in data) {
+    const replay = data.nativeReplay;
+    if (replay && replay.running !== false) mountOfficial(replay.url);
+    else renderFallback(replay ? '官方界面进程已退出，可重启：npm run native-replay' : null);
+  }
 }
 
 app.ontoolresult = result => { void receive(result).catch(() => renderFallback('读取任务状态失败')); };

@@ -67,5 +67,5 @@ ${dark.join(';\n')};
 ${dark.join(';\n')};
 } }
 `;
-await writeFile(fileURLToPath(new URL('../ui/prototype/theme.css', import.meta.url)), out);
+await writeFile(fileURLToPath(new URL('../ui/theme.css', import.meta.url)), out);
 console.log(`theme.css: statics ${statics.length}, light ${light.length}, dark ${dark.length}`);

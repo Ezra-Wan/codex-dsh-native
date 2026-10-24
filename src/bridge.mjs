@@ -94,19 +94,27 @@ export class Bridge {
     return result;
   }
 
-  async start({ task, cwd, mode = 'light', name = '', model = 'deepseek-v4-flash', provider = 'deepseek-official', maxTokens, effort, permission = 'workspace-write', subagents = false, role = 'peer' }) {
+  async start({ task, cwd, mode = 'light', name = '', model = 'deepseek-v4-flash', provider = 'deepseek-official', maxTokens, effort, permission = 'workspace-write', subagents = false, role = 'peer', backend = 'native' }) {
     return this.admit(async () => {
       if (!isAbsolute(cwd) || !(await stat(cwd)).isDirectory()) throw new Error('cwd must be an existing absolute directory');
       if (!MODES[mode]) throw new Error('mode must be light or coding');
       if (!['read-only', 'workspace-write'].includes(permission)) throw new Error('P0 supports read-only or workspace-write');
       if (typeof subagents !== 'boolean') throw new Error('subagents must be boolean');
       if (!['sub', 'peer'].includes(role)) throw new Error('role must be sub or peer');
+      if (!['native', 'worker'].includes(backend)) throw new Error('backend must be native or worker');
+      // worker backend is an explicit failover marker: execution goes through
+      // the retained deepseek_worker MCP, not this bridge. Record it so task
+      // directories and summaries never mix backends silently.
+      if (backend === 'worker') {
+        return { backend: 'worker', agent_id: null, routedTo: 'deepseek_worker',
+          note: 'Worker failover is explicit: dispatch this task through the deepseek_worker MCP tools and keep its own session identity. Do not rerun an ambiguous native task on the worker without checking its status first.' };
+      }
       const cap = maxTokens ?? MODES[mode].maxTokens;
       if (!Number.isInteger(cap) || cap < 1024 || cap > 32768) throw new Error('maxTokens must be 1024..32768');
       const id = randomUUID();
       const record = {
         agent_id: id, session_id: id, name, cwd: resolve(cwd), mode, model, provider,
-        maxTokens: cap, effort, permission, subagents, role, returnChars: MODES[mode].returnChars,
+        maxTokens: cap, effort, permission, subagents, role, backend: 'native', returnChars: MODES[mode].returnChars,
         status: 'new', turn: 0, createdAt: new Date().toISOString(), persisted: false,
       };
       return this.launch(record, task);
@@ -125,19 +133,21 @@ export class Bridge {
 
   // A peer the user drives in the native web UI keeps writing its session log.
   // Refuse to resume while that log is hot so two drivers never interleave.
-  // Real layout: sessions/<workspace-dir>/<session-id>/<log files>.
+  // Real layout: sessions/<workspace-dir>/<session-id>/<log files>. Writes at
+  // or before lastSelfWriteAt (+ grace) are the bridge's own turn or its SDK
+  // shutdown flush; only fresher writes count as external activity.
   async assertSessionQuiet(record, windowMs = 120_000) {
     if (!record.persisted) return;
+    const ownMark = (record.lastSelfWriteAt ?? 0) + 2_000;
     const sessionsRoot = join(this.home, 'sessions');
     for (const workspace of await readdir(sessionsRoot).catch(() => [])) {
-      const workspaceDir = join(sessionsRoot, workspace);
-      const sessionDir = join(workspaceDir, record.session_id);
+      const sessionDir = join(sessionsRoot, workspace, record.session_id);
       const entries = await readdir(sessionDir).catch(() => []);
       if (!entries.length) continue;
       for (const entry of entries) {
         const info = await stat(join(sessionDir, entry)).catch(() => null);
-        if (info?.isFile() && Date.now() - info.mtimeMs < windowMs) {
-          throw new Error('Session log shows writes within the last 2 minutes; the user side may be driving this peer. Retry after it goes quiet.');
+        if (info?.isFile() && Date.now() - info.mtimeMs < windowMs && info.mtimeMs > ownMark) {
+          throw new Error('Session log shows external writes within the last 2 minutes; the user side may be driving this peer. Retry after it goes quiet.');
         }
       }
     }
@@ -281,6 +291,9 @@ export class Bridge {
       }
     } finally {
       record.updatedAt = new Date().toISOString();
+      // The external-activity guard compares native-log freshness against
+      // this mark so the bridge's own writes never read as a user takeover.
+      record.lastSelfWriteAt = Date.now();
       try { await this.save(record); }
       finally {
         entry.timer = setTimeout(() => this.admit(() => this.release(record.agent_id)).catch(() => {}), this.idleMs);
@@ -293,7 +306,7 @@ export class Bridge {
     const { agent_id, session_id, name, mode, model, maxTokens, permission, cwd, turn, status, progress, error, resultPath, finishReason, usage } = record;
     const final = (record.final ?? '').slice(0, record.returnChars);
     const children = Object.entries(record.children ?? {}).map(([child_id, info]) => ({ child_id, ...info }));
-    return { agent_id, session_id, name, role: record.role ?? 'peer', ...(record.subagents ? { subagents: true } : {}), mode, model, maxTokens, permission, cwd, turn, status, progress,
+    return { agent_id, session_id, name, role: record.role ?? 'peer', backend: record.backend ?? 'native', ...(record.subagents ? { subagents: true } : {}), mode, model, maxTokens, permission, cwd, turn, status, progress,
       ...(children.length ? { children } : {}),
       ...(record.userTakeover ? { userTakeover: record.userTakeover } : {}),
       error,
@@ -384,7 +397,12 @@ export class Bridge {
     const entry = this.live.get(id);
     if (!entry || entry.busy) return;
     clearTimeout(entry.timer);
-    if (entry.runtime) await entry.runtime.close();
+    if (entry.runtime) {
+      await entry.runtime.close();
+      // The SDK's shutdown flush touches the native log after the turn ends.
+      entry.record.lastSelfWriteAt = Date.now();
+      await this.save(entry.record).catch(() => {});
+    }
     await entry.release();
     this.live.delete(id);
   }

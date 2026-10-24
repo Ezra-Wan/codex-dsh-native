@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, rm, mkdir, writeFile, utimes, cp } from 'node:fs/promises';
+import { mkdtemp, rm, mkdir, writeFile, utimes, cp, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -68,14 +68,32 @@ async function ready(fake, index = 0) {
 }
 const userPrompt = (text, seq) => ({ type: 'user/message', seq, time: seq, data: { message: { content: [{ type: 'text', text }], source: { kind: 'user' } } } });
 
+// Simulate that the bridge last wrote long ago, so a fresh native log reads
+// as external activity rather than the bridge's own turn output. followup
+// prefers the in-memory live record, so age that too.
+async function ageSelfWrites(bridge, id, msAgo) {
+  const mark = Date.now() - msAgo;
+  const live = bridge.live.get(id);
+  if (live) live.record.lastSelfWriteAt = mark;
+  const record = await bridge.read(id);
+  await bridge.save({ ...record, lastSelfWriteAt: mark });
+}
+
 test('a running child session is readable through ds_events before the parent persists', async t => {
   const { root, fake, bridge } = await setup(t);
+  // A real child log from the demo session makes readNativeEvents succeed.
+  // The .local fixture is machine-local (git-ignored); ship a sanitized copy
+  // in-repo to un-skip (tracked as a consolidation TODO).
+  const childId = 'bc243aa7-57aa-47b5-b219-c73a6a45c5ed';
+  const source = fileURLToPath(new URL('../.local/dsh-home/sessions/--D-~0040harness-codex-dsh-native-p0-.local-demo-1792663550562-workspace--/', import.meta.url));
+  const exists = await stat(source).then(() => true).catch(() => false);
+  if (!exists) {
+    t.skip('local demo session fixture not present; in-repo sanitized fixture is a tracked TODO');
+    return;
+  }
   await bridge.setEnabled(true);
   const task = await bridge.start({ cwd: root, task: 'spawn children', permission: 'read-only' });
   const runtime = await ready(fake);
-  // A real child log from the demo session makes readNativeEvents succeed.
-  const childId = 'bc243aa7-57aa-47b5-b219-c73a6a45c5ed';
-  const source = fileURLToPath(new URL('../.local/dsh-home/sessions/--D-~0040harness-codex-dsh-native-p0-.local-demo-1792663550562-workspace--/', import.meta.url));
   const target = join(bridge.home, 'sessions', '--D-~0040harness-codex-dsh-native-p0-.local-demo-1792663550562-workspace--');
   await mkdir(join(bridge.home, 'sessions'), { recursive: true });
   await cp(source, target, { recursive: true });
@@ -102,7 +120,9 @@ test('takeover protection sees the real two-level session layout', async t => {
   const logPath = join(sessionDir, 'session.v4.jsonl.zstd');
   await writeFile(logPath, 'x');
   await utimes(logPath, new Date(Date.now() - 5_000), new Date(Date.now() - 5_000));
-  await assert.rejects(bridge.followup(task.agent_id, 'next'), /user side may be driving/);
+  // Fresh writes only read as external when they postdate the bridge's own mark.
+  await ageSelfWrites(bridge, task.agent_id, 300_000);
+  await assert.rejects(bridge.followup(task.agent_id, 'next'), /external writes/);
   await utimes(logPath, new Date(Date.now() - 300_000), new Date(Date.now() - 300_000));
   const next = await bridge.followup(task.agent_id, 'next');
   assert.ok(['starting', 'running'].includes(next.status));
@@ -125,4 +145,37 @@ test('user takeover is reported on the second turn as well', async t => {
   runtime.finish();
   const result = await bridge.wait(task.agent_id);
   assert.equal(result.userTakeover?.events, 1, 'second-turn takeover is not under-reported');
+});
+
+test('the guard accepts the bridge\'s own fresh writes but rejects external ones', async t => {
+  const { root, fake, bridge } = await setup(t);
+  await bridge.setEnabled(true);
+  const task = await bridge.start({ cwd: root, task: 'first' });
+  (await ready(fake)).finish();
+  await bridge.wait(task.agent_id);
+  const sessionDir = join(bridge.home, 'sessions', '--D-workspace--', task.session_id);
+  await mkdir(sessionDir, { recursive: true });
+  const logPath = join(sessionDir, 'session.v4.jsonl.zstd');
+  await writeFile(logPath, 'x');
+  // Own writes: at/before lastSelfWriteAt + grace → followup must pass.
+  await utimes(logPath, new Date(Date.now() - 1_000), new Date(Date.now() - 1_000));
+  const next = await bridge.followup(task.agent_id, 'continue immediately');
+  assert.ok(['starting', 'running'].includes(next.status), 'own fresh log must not be read as a takeover');
+  await bridge.stop(task.agent_id);
+  // External writes: fresher than the bridge's own mark → refused.
+  await utimes(logPath, new Date(Date.now() - 500), new Date(Date.now() - 500));
+  await ageSelfWrites(bridge, task.agent_id, 300_000);
+  await assert.rejects(bridge.followup(task.agent_id, 'next'), /external writes/);
+});
+
+test('backend marker: worker is an explicit failover directive, native is recorded', async t => {
+  const { root, bridge } = await setup(t);
+  await bridge.setEnabled(true);
+  const failover = await bridge.start({ cwd: root, task: 'fallback work', backend: 'worker' });
+  assert.equal(failover.backend, 'worker');
+  assert.equal(failover.routedTo, 'deepseek_worker');
+  assert.equal(failover.agent_id, null);
+  const native = await bridge.start({ cwd: root, task: 'native work', permission: 'read-only', backend: 'native' });
+  assert.equal(native.backend, 'native');
+  await bridge.stop(native.agent_id);
 });
