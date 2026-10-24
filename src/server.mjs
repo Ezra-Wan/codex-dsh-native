@@ -14,7 +14,7 @@ if (arg) {
   else throw new Error('Use --enable, --disable, --status, or no argument for MCP stdio.');
 } else {
   const server = new McpServer({ name: 'codex-dsh-native-p0', version: '0.1.1' }, {
-    instructions: 'Optional native DSH bridge. Caller chooses light or coding per task. After ds_start, retain agent_id and continue independent work in parallel. For serial/foreground tasks, call ds_observe once to request an inline trace on MCP Apps hosts; do not repeatedly remount the view. ds_panel is an optional user-opened parallel-task entrypoint, not proof of a native Codex subagent sidebar. Never claim host rendering is working without observing it. Call ds_wait only when results are needed. A timeout means pending, not completion. There is no native Codex desktop wakeup callback in P0; do not end the parent task with uncollected work. Use ds_followup for the same task/session. Do not duplicate a task in both agents. Assign exclusive files or separate worktrees to concurrent writers, including yourself. Native DSH SDK manages context and compaction; summaries returned here do not replace native history. Inspect warnings, output and actual artifacts before accepting completion. Token caps are per model request, not total task cost.',
+    instructions: 'Optional native DSH bridge. Caller chooses light or coding per task. After ds_start, retain agent_id and continue independent work in parallel. For serial/foreground tasks, call ds_observe once to request an inline trace on MCP Apps hosts; do not repeatedly remount the view. ds_panel is an optional user-opened parallel-task entrypoint, not proof of a native Codex subagent sidebar. Never claim host rendering is working without observing it. Call ds_wait only when results are needed. A timeout means pending, not completion. There is no native Codex desktop wakeup callback in P0; do not end the parent task with uncollected work. Use ds_followup for the same task/session. Do not duplicate a task in both agents. Assign exclusive files or separate worktrees to concurrent writers, including yourself. Native DSH SDK manages context and compaction; summaries returned here do not replace native history. Inspect warnings, output and actual artifacts before accepting completion. Token caps are per model request, not total task cost. Single-entry discipline: ds_start is the one user-visible entry per task (it renders the task card); collection (ds_wait) and observation run through that card or as model-internal calls — do not emit extra observe/panel calls per task just to show progress.',
   });
   const add = (name, description, inputSchema, handler, presentation = {}) => server.registerTool(name, { description, inputSchema, ...presentation }, async args => {
     try {
@@ -51,15 +51,25 @@ if (arg) {
     provider: z.string().optional(),
     effort: z.string().optional(),
     maxTokens: z.number().int().min(1024).max(32768).optional(),
-  }, args => bridge.start(args));
+  }, args => bridge.start(args), {
+    // P0-A single entry: the dispatch call itself renders the task card, so
+    // one dsh-xxx row owns the whole task lifecycle; collection and
+    // observation ride the card instead of separate user-visible calls.
+    title: 'DS 任务',
+    _meta: { ui: { resourceUri } },
+  });
   add('ds_followup', 'Continue an idle native DSH session with its persisted context. The same workspace, model, permission and output cap are retained. Missing native history fails; it is never silently replaced with a fresh session.', {
     agent_id: agent,
     task: z.string().min(1),
   }, ({ agent_id, task }) => bridge.followup(agent_id, task));
-  add('ds_wait', 'Collect compact progress, actual recent actions, warnings or a bounded final answer. Wait at most 50 seconds; running remains pending. completed_with_warnings means native tool failures occurred and must be inspected using ds_events. Full final text is in resultPath. failed/interrupted is not success.', {
+  add('ds_wait', 'Collect compact progress, actual recent actions, warnings or a bounded final answer. Returns as soon as a fresh native event arrives (event-driven bounded wait), at the timeout, or at completion. Running remains pending. completed_with_warnings means native tool failures occurred and must be inspected using ds_events. Full final text is in resultPath. failed/interrupted is not success.', {
     agent_id: agent,
     timeoutMs: z.number().int().min(0).max(50000).default(50000),
-  }, ({ agent_id, timeoutMs }) => bridge.wait(agent_id, timeoutMs));
+  }, ({ agent_id, timeoutMs }) => bridge.wait(agent_id, timeoutMs), {
+    // Model protocol + callable from the task card; never a second
+    // user-visible entry alongside the ds_start card (P0-A).
+    _meta: { ui: { visibility: ['model', 'app'] } },
+  });
   add('ds_stop', 'Interrupt this bridge task by closing its dedicated SDK runtime. Native history remains resumable; filesystem edits are not rolled back. Other bridge tasks continue.', {
     agent_id: agent,
   }, ({ agent_id }) => bridge.stop(agent_id));
