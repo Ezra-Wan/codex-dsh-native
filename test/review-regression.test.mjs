@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, rm, mkdir, writeFile, utimes, cp, readdir } from 'node:fs/promises';
+import { mkdtemp, rm, mkdir, writeFile, readFile, utimes, cp, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -17,7 +17,7 @@ function factory() {
     instances,
     create(record, options = {}) {
       const runtime = {
-        closed: false, patches: options.patches ?? [],
+        closed: false, patches: options.patches ?? [], options, record,
         start: async () => {},
         session: id => ({ getWorkingDirectory: async () => ({}) }),
         resumeSession: async () => {},
@@ -144,6 +144,43 @@ test('the guard accepts the bridge\'s own fresh writes but rejects external ones
   await utimes(logPath, new Date(Date.now() - 500), new Date(Date.now() - 500));
   await ageSelfWrites(bridge, task.agent_id, 300_000);
   await assert.rejects(bridge.followup(task.agent_id, 'next'), /external writes/);
+});
+
+test('web-embed tasks launch the sdk-web profile, pick up the adapter URL and clean it up', async t => {
+  const { root, fake, bridge } = await setup(t);
+  await bridge.setEnabled(true);
+  const task = await bridge.start({ cwd: root, task: 'observed work', permission: 'read-only' });
+  const runtime = await ready(fake);
+  // The dispatch passed the sdk-web profile and a per-task web overlay.
+  assert.equal(runtime.patches.length, 1);
+  assert.equal(runtime.options?.profile ?? (fake.lastOptions?.profile), 'sdk-web');
+  const overlay = await readFile(runtime.patches[0], 'utf8');
+  assert.match(overlay, /id: webserver/);
+  assert.match(overlay, /port: 8801/, 'per-task port pinned in the overlay');
+  assert.match(overlay, /@codex-dsh\/web-embed/);
+  assert.match(overlay, /task-urls/);
+  // The adapter writes the URL file once the in-process web stack is live.
+  const urlFile = join(bridge.root, 'task-urls', '8801.json');
+  await mkdir(join(bridge.root, 'task-urls'), { recursive: true });
+  await writeFile(urlFile, JSON.stringify({ url: 'http://127.0.0.1:8801/?token=tok', pid: 1, writtenAt: new Date().toISOString() }));
+  for (let i = 0; i < 40 && !(await bridge.status(task.agent_id)).nativeUrl; i++) {
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+  const summary = await bridge.status(task.agent_id);
+  assert.equal(summary.nativeUrl, 'http://127.0.0.1:8801/?token=tok');
+  runtime.finish();
+  await bridge.wait(task.agent_id);
+  await bridge.release(task.agent_id);
+  assert.equal(await readFile(urlFile, 'utf8').then(() => true).catch(() => false), false, 'URL file removed on release');
+});
+
+test('webEmbed:false keeps the plain sdk profile without overlays', async t => {
+  const { root, fake, bridge } = await setup(t);
+  await bridge.setEnabled(true);
+  await bridge.start({ cwd: root, task: 'plain', permission: 'read-only', webEmbed: false });
+  const runtime = await ready(fake);
+  assert.deepEqual(runtime.patches, []);
+  runtime.finish();
 });
 
 test('backend marker: worker is an explicit failover directive, native is recorded', async t => {
