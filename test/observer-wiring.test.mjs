@@ -101,16 +101,16 @@ test('task switching clears state and re-anchors without wiring errors', async (
   select.dispatch('change');
   assert.equal(doc.byId.get('state').textContent, '', 'switching clears the previous task state');
   assert.equal(doc.byId.get('state').title, '');
-  assert.ok(select.src === undefined || true);
-  assert.equal(doc.byId.get('frame').src, 'http://127.0.0.1:8792/?token=t#session=bbbbbbbb-0000-0000-0000-000000000002');
+  // No per-task URL on either task: the embed keeps its current mount
+  // (the hash channel was removed; binding is per-task URL only).
+  assert.equal(doc.byId.get('frame').src, 'http://127.0.0.1:8792/?token=t');
   // A tool result for the new selection is received without errors.
   card.receive({ items: [{ agent_id: 'bbbbbbbb-0000-0000-0000-000000000002', name: '任务B', status: 'running' }] });
   assert.equal(select.children.length, 1);
   card.core.stop();
 });
 
-test('a missing replay keeps the waiting fallback and the loop alive, no errors', async () => {
-  const doc = fakeDom();
+test('a missing replay keeps the waiting fallback and the loop alive, no errors', async () => {  const doc = fakeDom();
   const app = fakeApp();
   app.callServerTool = async ({ name, arguments: args }) => {
     app.calls.push({ name, args });
@@ -126,5 +126,56 @@ test('a missing replay keeps the waiting fallback and the loop alive, no errors'
   assert.equal(doc.byId.get('fallback').style.display, 'block');
   assert.equal(doc.byId.get('frame').style.display, 'none');
   assert.ok(app.calls.some(call => call.name === 'ds_wait'), 'loop issued its first wait');
+  card.core.stop();
+});
+
+test('S2 binding: each task embeds its own executing-process URL; switching swaps the iframe', async () => {
+  const doc = fakeDom();
+  const app = fakeApp();
+  const urlA = 'http://127.0.0.1:8801/?token=a';
+  const urlB = 'http://127.0.0.1:8802/?token=b';
+  app.callServerTool = async ({ name, arguments: args }) => {
+    app.calls.push({ name, args });
+    if (name === 'ds_bridge') {
+      return { structuredContent: { enabled: true, items: [
+        { agent_id: 'aaaaaaaa-0000-0000-0000-000000000001', name: '任务A', status: 'running', nativeUrl: urlA },
+        { agent_id: 'bbbbbbbb-0000-0000-0000-000000000002', name: '任务B', status: 'running', nativeUrl: urlB },
+      ] } };
+    }
+    if (name === 'ds_wait') return new Promise(() => {});
+    throw new Error('unexpected');
+  };
+  const card = createCard({ app, doc });
+  await card.start();
+  // Default selection is the latest task (B): its own URL mounts, not a
+  // global replay URL and not another chat's task.
+  assert.equal(doc.byId.get('frame').dataset.mounted, urlB);
+  assert.equal(doc.byId.get('frame').src, urlB);
+  // Switch to A: the iframe swaps to A's executing-process UI.
+  const select = doc.byId.get('tasks');
+  select.value = 'aaaaaaaa-0000-0000-0000-000000000001';
+  select.dispatch('change');
+  assert.equal(doc.byId.get('frame').src, urlA);
+  assert.equal(doc.byId.get('frame').dataset.mounted, urlA);
+  card.core.stop();
+});
+
+test('S2 fallback: tasks without per-task URLs defer to the global nativeReplay', async () => {
+  const doc = fakeDom();
+  const app = fakeApp();
+  const globalUrl = 'http://127.0.0.1:8792/?token=global';
+  app.callServerTool = async ({ name, arguments: args }) => {
+    app.calls.push({ name, args });
+    if (name === 'ds_bridge') {
+      return { structuredContent: { enabled: true, items: [
+        { agent_id: 'dddddddd-0000-0000-0000-000000000004', name: '旧任务', status: 'completed' },
+      ], nativeReplay: { url: globalUrl, running: true } } };
+    }
+    if (name === 'ds_wait') return new Promise(() => {});
+    throw new Error('unexpected');
+  };
+  const card = createCard({ app, doc });
+  await card.start();
+  assert.equal(doc.byId.get('frame').dataset.mounted, globalUrl, 'global replay URL used when the task has none');
   card.core.stop();
 });
