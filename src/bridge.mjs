@@ -238,6 +238,10 @@ export class Bridge {
           record.progress.eventCount++;
           record.progress.lastEvent = event.type;
           record.progress.lastActivityAt = new Date().toISOString();
+          // Wake event-driven ds_wait callers now, not at their timeout.
+          if (entry.eventWaiters?.size) for (const wake of entry.eventWaiters) {
+            try { wake(record.progress.eventCount); } catch { /* a waiter's own guard */ }
+          }
           const action = visibleEvent(event);
           // Bridge prompts exactly one kind=user message per turn (runtime.run);
           // extras beyond record.turn are the user driving this peer elsewhere.
@@ -367,9 +371,25 @@ export class Bridge {
     if (!Number.isInteger(timeoutMs) || timeoutMs < 0 || timeoutMs > 50_000) throw new Error('timeoutMs must be 0..50000');
     const entry = this.live.get(id);
     if (entry?.busy && timeoutMs) {
+      // Event-driven bounded wait: return as soon as a fresh native event for
+      // this task arrives, not only at completion or the full timeout (the
+      // P0-B degraded push path — durable events, not provider token frames).
+      const since = entry.record.progress.eventCount;
       let timer;
-      try { await Promise.race([entry.done, new Promise(resolve => { timer = setTimeout(resolve, timeoutMs); })]); }
-      finally { clearTimeout(timer); }
+      let onEvent;
+      try {
+        await Promise.race([
+          entry.done,
+          new Promise(resolve => { timer = setTimeout(resolve, timeoutMs); }),
+          new Promise(resolve => {
+            onEvent = () => { if (entry.record.progress.eventCount > since) resolve(); };
+            (entry.eventWaiters ??= new Set()).add(onEvent);
+          }),
+        ]);
+      } finally {
+        clearTimeout(timer);
+        entry.eventWaiters?.delete(onEvent);
+      }
     }
     return this.status(id);
   }
