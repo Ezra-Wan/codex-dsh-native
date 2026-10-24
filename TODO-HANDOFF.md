@@ -10,17 +10,18 @@
 
 - [x] 源码核对完成（`docs/s1-stream-design.md` 汇总）：独立 replay 进程拿不到瞬态帧（进程内性）；SDK stdio 不转发流帧；token 唯一出口是进程内 `authenticatedUrl()`。
 - [x] 最小方案落地：**sdk-web profile**（dsh-base+dsh-sdk-app+dsh-web-app，同版本叠加无 fork）——执行进程自身成为官方 UI 宿主，session-controller 与执行同体，follow 流直收瞬态帧；`@codex-dsh/web-embed` 薄插件（~40 行自有代码）进程内落盘带 token URL；桥按任务分配端口 8801+、生成 overlay、采集 `record.nativeUrl`。相对协议改造路径的改动面对比见设计文档。
-- [x] 原生语义保留：原生工具/会话身份/工作区/压缩/父子语义不变（仅 profile 叠加与 URL 记录）；正文由官方界面消费，未重写聊天 DOM；attempt/revision、start/chunk/end、settlement、重连 baseline 语义由官方实现承担并以契约测试锁定。
-- [x] 离线验证覆盖实际适配代码与官方折叠契约（`test/official-stream-contract.test.mjs` 对逐字 vendor 的上游实现）：依次可见/结算/中断退役/重连重建/双 lane 隔离。合成输入已标注。
-- [ ] **S3 窗口首验**：sdk+web 同进程实跑（插件挂载/握手/监听）；真实长回复结束前多次正文增长；宿主内 iframe 承载任务级 URL；A/B 双进程实测。见 docs/s1-stream-design.md 验证边界与风险清单。
+- [x] **s1-s2-acceptance 四断点返修（2026-10-24 四次，HEAD 228906c）**：①插件按真实 cordis 契约 `apply(ctx,config)`（旧版读 `ctx.config` 在真实加载器必炸）+ 真实 cordis 加载测试三场景；profile 依赖改 `link:` 且 init 幂等刷新副本。②`nativeUrl` 按运行时世代管理（release 撤销死 token、冷续接重采新世代，两世代回归）。③卡片消费 ds_wait 结果中的异步 nativeUrl 即时换源、无 URL 任务显式撤旧页、单任务派发结果接管归属（接线测试三场景）。④**任务级 DSH_HOME**：web-embed 任务独享 `task-homes/<id>`（sessions 私有→该任务会话是官方 UI 列表唯一——接收方选择契约由容器范围保证；profiles junction 复用共享安装；跨 release 存活供冷续接）。
+- [x] 原生语义保留：原生工具/会话身份/工作区/压缩/父子语义不变；正文由官方界面消费；attempt/revision、settlement、重连 baseline 语义由官方实现承担并以契约测试锁定。
+- [x] 离线验证覆盖实际适配代码与官方折叠契约：插件真实加载器测试（URL 写出/loader 门控/一次性/坏配置无副作用）、折叠四场景（依次可见/结算/中断退役/重连重建/隔离）、桥世代/任务 home/卡片异步绑定。测试 49/49。
+- [ ] **S3 窗口首验**（不变）：sdk+web 同进程实跑；真实长回复结束前多次正文增长；宿主内 iframe 承载任务级 URL；A/B 双进程实测。已知边界：任务级 home 使全局 native-replay 看不到 web-embed 任务会话（其观察走任务卡片；全局回放服务旧任务/非 embed 任务）。
 
-交付（本轮）：`adapter/web-embed`、`scripts/init-sdk-web-profile.mjs`、bridge/runtime 接线、卡片按任务绑定、契约测试 41/41、设计文档。
+交付（本轮）：`adapter/web-embed`、`scripts/init-sdk-web-profile.mjs`、bridge/runtime 接线、卡片按任务绑定、官方折叠契约测试、四断点返修、设计文档。
 
 ### S2：绑定所选会话，接入现有任务卡片
 
-- [x] **有接收方实现的会话选择通道**（2026-10-24）：接收方 = 该任务 sdk-web 执行进程自带的官方 Web 栈。卡片挂载所选任务的 `nativeUrl`（每任务独立进程/端口/token）——点 A 显 A、切 B 显 B（iframe 换源），无共享状态可串；已删除被接收方忽略的 `#session=` 假通道。接线测试覆盖实际选择与换源（fake host + DOM 执行真实模块）。
-- [x] 空列表后首次派发/切换期间旧响应/收起再展开：旧响应丢弃由观察循环 seq 机制承担（控制器测试锁定）；重新连接由官方 Web 自身重连 + URL 不变性承担（窗口实测）。
-- [ ] S3 窗口：宿主内 iframe 承载 loopback+token URL 的实际表现；A/B 双进程切换实测。
+- [x] **有接收方实现的会话选择通道**（2026-10-24，四次返修后）：接收方 = 该任务 sdk-web 执行进程 + **任务级 DSH_HOME**——该进程的官方 UI 列表中只有本任务会话（sessions 私有），"选中目标会话"由容器范围保证而非端口/token 差异；卡片挂所选任务 nativeUrl、单任务派发结果接管归属、无 URL 撤旧页；`#session=` 假通道已删。
+- [x] 空列表后首次派发/切换期间旧响应/收起再展开：旧响应丢弃由观察循环 seq 机制承担；重新连接由官方 Web 自身重连 + URL 世代管理承担（窗口实测）。
+- [ ] S3 窗口：宿主内 iframe 承载 loopback+token URL 的实际表现；A/B 双任务级 home 切换实测。
 
 ### S3：隔离实验窗口验收，取得真实正文增长证据
 
