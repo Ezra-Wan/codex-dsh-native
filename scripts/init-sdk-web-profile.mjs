@@ -19,8 +19,13 @@ const profileDir = join(profiles, 'sdk-web');
 
 const exists = path => access(path, constants.F_OK).then(() => true).catch(() => false);
 
-if (await exists(join(profileDir, 'node_modules', '@deepseek-ai', 'dsh-web-app'))) {
-  console.log('sdk-web profile already initialized.');
+// The adapter copy inside the profile is ALWAYS refreshed from the source of
+// truth (adapter/web-embed) — the profile dependency uses `link:` so the
+// in-profile copy is live-linked, not a stale pnpm `file:` copy.
+const profileManifest = join(profileDir, 'package.json');
+if (await exists(profileManifest)) {
+  await cp(join(root, 'adapter', 'web-embed'), join(profileDir, 'web-embed'), { recursive: true });
+  console.log('sdk-web profile present; adapter copy refreshed.');
   process.exit(0);
 }
 if (!(await exists(join(profiles, 'web')))) {
@@ -46,7 +51,7 @@ await writeFile(join(profileDir, 'package.json'), JSON.stringify({
     '@deepseek-ai/dsh-base': '0.2.1-rc.2',
     '@deepseek-ai/dsh-sdk-app': '0.2.1-rc.2',
     '@deepseek-ai/dsh-web-app': '0.2.1-rc.2',
-    '@codex-dsh/web-embed': 'file:./web-embed',
+    '@codex-dsh/web-embed': 'link:./web-embed',
   },
   allowScripts: {
     '@deepseek-ai/dsh-subprocess-local@0.2.1-rc.2': true,
