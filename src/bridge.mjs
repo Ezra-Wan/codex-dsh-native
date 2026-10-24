@@ -59,6 +59,9 @@ export class Bridge {
   // Each web-embed task owns one loopback port; allocation is deterministic
   // from the base and skips ports already handed out in this process.
   nextWebPort() {
+    if (this.webEmbedBasePort + this.portCursor + 1 > 65535) {
+      throw new Error('Web port range exhausted; restart the bridge with a lower CODEX_DSH_WEB_BASE_PORT.');
+    }
     this.portCursor += 1;
     return this.webEmbedBasePort + this.portCursor;
   }
