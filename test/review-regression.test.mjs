@@ -146,6 +146,34 @@ test('the guard accepts the bridge\'s own fresh writes but rejects external ones
   await assert.rejects(bridge.followup(task.agent_id, 'next'), /external writes/);
 });
 
+test('the native URL is generation-scoped: release revokes it, cold followup re-collects the new token', async t => {
+  const { root, fake, bridge } = await setup(t);
+  await bridge.setEnabled(true);
+  const task = await bridge.start({ cwd: root, task: 'two generations', permission: 'read-only' });
+  const urlFile = join(bridge.root, 'task-urls', '8801.json');
+  await mkdir(join(bridge.root, 'task-urls'), { recursive: true });
+  const writeUrl = token => writeFile(urlFile, JSON.stringify({ url: `http://127.0.0.1:8801/?token=${token}`, pid: 1, writtenAt: new Date().toISOString() }));
+  await writeUrl('gen1');
+  for (let i = 0; i < 40 && !(await bridge.status(task.agent_id)).nativeUrl; i++) await new Promise(r => setTimeout(r, 100));
+  assert.equal((await bridge.status(task.agent_id)).nativeUrl, 'http://127.0.0.1:8801/?token=gen1');
+  (await ready(fake)).finish();
+  await bridge.wait(task.agent_id);
+  await bridge.release(task.agent_id);
+  // Release killed the process: the URL must be revoked, not served as live.
+  const afterRelease = await bridge.status(task.agent_id);
+  assert.equal(afterRelease.nativeUrl, undefined, 'stale token revoked on release');
+  // Cold followup rebuilds the runtime; its launch clears the URL file first,
+  // so the new generation's adapter writes the new token afterwards.
+  await bridge.followup(task.agent_id, 'continue');
+  await writeUrl('gen2');
+  for (let i = 0; i < 40 && (await bridge.status(task.agent_id)).nativeUrl !== 'http://127.0.0.1:8801/?token=gen2'; i++) {
+    await new Promise(r => setTimeout(r, 100));
+  }
+  assert.equal((await bridge.status(task.agent_id)).nativeUrl, 'http://127.0.0.1:8801/?token=gen2', 'second generation URL collected');
+  (await ready(fake, 1)).finish();
+  await bridge.wait(task.agent_id);
+});
+
 test('web-embed tasks launch the sdk-web profile, pick up the adapter URL and clean it up', async t => {
   const { root, fake, bridge } = await setup(t);
   await bridge.setEnabled(true);
