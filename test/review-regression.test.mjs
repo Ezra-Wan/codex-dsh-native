@@ -6,25 +6,10 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Bridge } from '../src/bridge.mjs';
 
-// Regression tests for the four defects in .local/acceptance-review-20261024/REVIEW.md.
-
-// Minimal DOM stub for markdown.mjs outside a browser.
-function installDomStub() {
-  globalThis.document = {
-    createElement: tag => ({ tag, children: [], append(...n) { this.children.push(...n); } }),
-    createElementNS: () => ({}),
-    createTextNode: t => ({ text: t }),
-  };
-}
-installDomStub();
-const { renderMarkdown } = await import('../ui/prototype/markdown.mjs');
-
-test('markdown renders bold, emphasis, links and strikethrough without stack overflow', () => {
-  const root = renderMarkdown('**粗体** *斜体* [链接](https://example.com) ~~删除线~~ `code` and text');
-  assert.ok(root.children.length >= 1);
-  const strong = JSON.stringify(root.children).includes('粗体');
-  assert.ok(strong, 'bold text survives rendering');
-});
+// Regression tests for the acceptance/consolidation reviews
+// (.local/acceptance-review-20261024, .local/consolidation-review-20261024).
+// The markdown stack-overflow regression lived with ui/prototype and was
+// archived together with it (chore/retire-prototype).
 
 function factory() {
   const instances = [];
