@@ -104,9 +104,10 @@ test('a response landing after a task switch is dropped, never applied', async (
 test('a followup result revives a terminal task into the hot loop', async () => {
   const clock = fakeClock();
   let calls = 0;
+  const callTimes = [];
   let status = 'completed';
   const core = createObserverCore({
-    wait: async () => { calls++; return { status }; },
+    wait: async () => { callTimes.push(clock.now()); calls++; return { status }; },
     apply: () => {},
     sleep: clock.sleep, now: clock.now,
   });
@@ -120,8 +121,12 @@ test('a followup result revives a terminal task into the hot loop', async () => 
   core.observeStatus({ status: 'running' });
   status = 'running';
   await clock.tick();
+  await clock.tick();
   assert.ok(calls >= 2, `slow check ran and observed the revival (calls=${calls})`);
-  assert.ok(clock.pending().includes(800), 'hot loop cadence restored after revival');
+  // P2 regression: the slow check and the first hot request after revival
+  // must respect the 800ms floor — never back-to-back.
+  const lastTwo = callTimes.slice(-2);
+  assert.ok(lastTwo[1] - lastTwo[0] >= 800, `revived hot request paced by ≥800ms, got ${lastTwo[1] - lastTwo[0]}ms`);
   core.stop();
   await clock.tick();
   await running;

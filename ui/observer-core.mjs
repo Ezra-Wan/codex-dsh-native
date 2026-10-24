@@ -42,6 +42,7 @@ export function createObserverCore({ wait, apply, sleep = ms => new Promise(r =>
           const slowId = getTaskId();
           if (!slowId) continue;
           const slowSeq = seq;
+          const slowStartedAt = now();
           try {
             const status = await wait(slowId);
             if (slowSeq !== seq) continue;
@@ -53,6 +54,11 @@ export function createObserverCore({ wait, apply, sleep = ms => new Promise(r =>
           } catch {
             errorStreak++;
           }
+          // Revival re-enters the hot loop; pace it like every other path so
+          // the slow check and the first hot request never fire back-to-back.
+          const slowSpent = now() - slowStartedAt;
+          const slowIdle = Math.max(MIN_LOOP_MS - slowSpent, errorStreak ? Math.min(1000 * 2 ** (errorStreak - 1), MAX_BACKOFF_MS) : 0);
+          if (slowIdle > 0) await sleep(slowIdle);
           continue;
         }
         const mySeq = seq;
