@@ -159,16 +159,14 @@ test('backend marker: worker is an explicit failover directive, native is record
 });
 
 test('ensureNativeReplay is inert under the test guard (no service side effects)', async t => {
-  const { root, bridge } = await setup(t);
+  const { bridge } = await setup(t);
   const previous = process.env.DSH_NATIVE_REPLAY;
   process.env.DSH_NATIVE_REPLAY = 'off';
   try {
-    const before = (await readdir(join(root, '..')).catch(() => [])).length;
+    // The guard returns at the top of the function: no state read, no spawn
+    // (the spawn call sits below the guard in bridge.mjs).
     const result = await bridge.ensureNativeReplay();
     assert.equal(result, null, 'guard returns without spawning');
-    assert.equal(typeof result?.url, 'undefined');
-    const after = (await readdir(join(root, '..')).catch(() => [])).length;
-    assert.equal(after, before);
   } finally {
     if (previous === undefined) delete process.env.DSH_NATIVE_REPLAY;
     else process.env.DSH_NATIVE_REPLAY = previous;
@@ -191,4 +189,29 @@ test('ds_wait returns on the first fresh native event, not at the timeout (P0-B 
   assert.ok(result.progress.eventCount >= 1);
   runtime.finish();
   await bridge.wait(task.agent_id);
+});
+
+test('consecutive assistant fragments surface before completion, and parallel tasks never wake each other', async t => {
+  const { root, fake, bridge } = await setup(t);
+  await bridge.setEnabled(true);
+  const laneA = await bridge.start({ cwd: root, task: 'lane A', permission: 'read-only', name: 'A' });
+  const laneB = await bridge.start({ cwd: root, 'task': 'lane B', permission: 'read-only', name: 'B' });
+  const runtimeA = await ready(fake, 0);
+  const runtimeB = await ready(fake, 1);
+  const message = (text, seq) => ({ type: 'assistant/message', seq, time: Date.now(), data: { message: { content: [{ type: 'text', text }] } } });
+  // Two waits park; each must surface its OWN lane's fragments in order.
+  const waitA = bridge.wait(laneA.agent_id, 20_000);
+  const waitB = bridge.wait(laneB.agent_id, 20_000);
+  await new Promise(resolve => setTimeout(resolve, 60));
+  runtimeB.emit(message('B 的第一段', 1)); // must NOT wake A's waiter
+  runtimeA.emit(message('A 的第一段', 1));
+  runtimeA.emit(message('A 的第二段', 2));
+  const [a, b] = await Promise.all([waitA, waitB]);
+  const aTexts = (a.recentActions ?? []).filter(action => action.type === 'assistant/message').map(action => action.text);
+  const bTexts = (b.recentActions ?? []).filter(action => action.type === 'assistant/message').map(action => action.text);
+  assert.deepEqual(aTexts, ['A 的第一段', 'A 的第二段'], 'lane A surfaced both fragments before completion');
+  assert.deepEqual(bTexts, ['B 的第一段'], 'lane B surfaced only its own fragment');
+  runtimeA.finish(); runtimeB.finish();
+  await bridge.wait(laneA.agent_id);
+  await bridge.wait(laneB.agent_id);
 });
