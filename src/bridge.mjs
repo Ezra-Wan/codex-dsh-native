@@ -385,7 +385,11 @@ export class Bridge {
     const { agent_id, session_id, name, mode, model, maxTokens, permission, cwd, turn, status, progress, error, resultPath, finishReason, usage } = record;
     const final = (record.final ?? '').slice(0, record.returnChars);
     const children = Object.entries(record.children ?? {}).map(([child_id, info]) => ({ child_id, ...info }));
-    return { agent_id, session_id, name, role: record.role ?? 'peer', backend: record.backend ?? 'native', ...(record.subagents ? { subagents: true } : {}), ...(record.nativeUrl ? { nativeUrl: record.nativeUrl } : {}), mode, model, maxTokens, permission, cwd, turn, status, progress,
+    // webEmbed tasks ALWAYS carry nativeUrl (string|null): null is the
+    // explicit revoked/not-yet-collected state. Omitting the key (the old
+    // truthy spread) made the card unable to distinguish revocation from
+    // "no information", leaving dead URLs mounted.
+    return { agent_id, session_id, name, role: record.role ?? 'peer', backend: record.backend ?? 'native', ...(record.subagents ? { subagents: true } : {}), ...(record.webEmbed ? { nativeUrl: record.nativeUrl ?? null } : {}), mode, model, maxTokens, permission, cwd, turn, status, progress,
       ...(children.length ? { children } : {}),
       ...(record.userTakeover ? { userTakeover: record.userTakeover } : {}),
       error,
