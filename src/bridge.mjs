@@ -446,7 +446,9 @@ export class Bridge {
 
   // Boot the official web UI adapter if it is not already running. The
   // observer card embeds its URL; failures degrade to the fallback panel.
+  // Callers that must stay side-effect free (tests) check the env guard first.
   async ensureNativeReplay() {
+    if (process.env.DSH_NATIVE_REPLAY === 'off') return null;
     const current = await this.nativeReplay();
     if (current?.running !== false && current) return current;
     const script = fileURLToPath(new URL('../scripts/native-replay.mjs', import.meta.url));

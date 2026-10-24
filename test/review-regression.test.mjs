@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, rm, mkdir, writeFile, utimes, cp } from 'node:fs/promises';
+import { mkdtemp, rm, mkdir, writeFile, utimes, cp, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -156,6 +156,23 @@ test('backend marker: worker is an explicit failover directive, native is record
   const native = await bridge.start({ cwd: root, task: 'native work', permission: 'read-only', backend: 'native' });
   assert.equal(native.backend, 'native');
   await bridge.stop(native.agent_id);
+});
+
+test('ensureNativeReplay is inert under the test guard (no service side effects)', async t => {
+  const { root, bridge } = await setup(t);
+  const previous = process.env.DSH_NATIVE_REPLAY;
+  process.env.DSH_NATIVE_REPLAY = 'off';
+  try {
+    const before = (await readdir(join(root, '..')).catch(() => [])).length;
+    const result = await bridge.ensureNativeReplay();
+    assert.equal(result, null, 'guard returns without spawning');
+    assert.equal(typeof result?.url, 'undefined');
+    const after = (await readdir(join(root, '..')).catch(() => [])).length;
+    assert.equal(after, before);
+  } finally {
+    if (previous === undefined) delete process.env.DSH_NATIVE_REPLAY;
+    else process.env.DSH_NATIVE_REPLAY = previous;
+  }
 });
 
 test('ds_wait returns on the first fresh native event, not at the timeout (P0-B data layer)', async t => {
