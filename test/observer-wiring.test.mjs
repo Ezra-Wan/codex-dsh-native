@@ -391,3 +391,15 @@ test('solo dispatch adds the missing select option, not just the value', () => {
   card.receive({ ...dispatched, status: 'running' });
   assert.equal(select.children.length, 2, 'repeated results do not duplicate options');
 });
+
+test('an explicitly pending task stays in its waiting view instead of showing global replay', () => {
+  const doc = fakeDom();
+  const card = createCard({ app: fakeApp(), doc });
+  card.receive({
+    items: [{ agent_id: 'aaaaaaaa-0000-0000-0000-000000000001', name: 'pending A', status: 'starting', nativeUrl: null }],
+    nativeReplay: { url: 'http://127.0.0.1:8792/?token=synthetic-other-history', running: true },
+  });
+  assert.equal(doc.byId.get('frame').style.display, 'none');
+  assert.equal(doc.byId.get('frame').dataset.mounted, undefined);
+  assert.equal(doc.byId.get('fallback').style.display, 'block');
+});
