@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, rm, mkdir, writeFile, utimes, cp, stat } from 'node:fs/promises';
+import { mkdtemp, rm, mkdir, writeFile, utimes, cp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -81,16 +81,9 @@ async function ageSelfWrites(bridge, id, msAgo) {
 
 test('a running child session is readable through ds_events before the parent persists', async t => {
   const { root, fake, bridge } = await setup(t);
-  // A real child log from the demo session makes readNativeEvents succeed.
-  // The .local fixture is machine-local (git-ignored); ship a sanitized copy
-  // in-repo to un-skip (tracked as a consolidation TODO).
+  // The in-repo sanitized copy of the real demo session log (previous commit).
   const childId = 'bc243aa7-57aa-47b5-b219-c73a6a45c5ed';
-  const source = fileURLToPath(new URL('../.local/dsh-home/sessions/--D-~0040harness-codex-dsh-native-p0-.local-demo-1792663550562-workspace--/', import.meta.url));
-  const exists = await stat(source).then(() => true).catch(() => false);
-  if (!exists) {
-    t.skip('local demo session fixture not present; in-repo sanitized fixture is a tracked TODO');
-    return;
-  }
+  const source = fileURLToPath(new URL('../test/fixtures/sessions/--D-~0040harness-codex-dsh-native-p0-.local-demo-1792663550562-workspace--/', import.meta.url));
   await bridge.setEnabled(true);
   const task = await bridge.start({ cwd: root, task: 'spawn children', permission: 'read-only' });
   const runtime = await ready(fake);
