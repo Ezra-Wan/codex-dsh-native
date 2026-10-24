@@ -126,6 +126,17 @@ export function createCard({ app, doc = globalThis.document }) {
     }, 5000);
   }
 
+  // Both result shapes must create the selected option before assigning value.
+  function syncOptions() {
+    $('tasks').replaceChildren(...tasks.map(item => {
+      const option = doc.createElement('option');
+      option.value = item.agent_id;
+      option.textContent = item.name || item.agent_id.slice(0, 8);
+      return option;
+    }));
+    $('tasks').value = selected;
+  }
+
   function receive(data) {
     const items = data.items ?? (data.agent_id ? [data] : []);
     const soloDispatch = !Array.isArray(data.items) && data.agent_id ? data : null;
@@ -142,7 +153,7 @@ export function createCard({ app, doc = globalThis.document }) {
       if (cached) {
         if (soloDispatch.nativeUrl !== undefined) cached.nativeUrl = soloDispatch.nativeUrl;
       } else tasks.push(soloDispatch);
-      $('tasks').value = selected;
+      syncOptions();
       core.observeStatus(soloDispatch);
       applyTaskBinding();
       return;
@@ -157,13 +168,7 @@ export function createCard({ app, doc = globalThis.document }) {
         $('state').textContent = '';
         $('state').removeAttribute('title');
       }
-      $('tasks').replaceChildren(...items.map(item => {
-        const option = doc.createElement('option');
-        option.value = item.agent_id;
-        option.textContent = item.name || item.agent_id.slice(0, 8);
-        return option;
-      }));
-      $('tasks').value = selected;
+      syncOptions();
       // A followup/tool result may have revived the task: resume hot watching,
       // or mark it terminal so the paced loop parks in slow watch.
       const status = items.find(item => item.agent_id === selected);
