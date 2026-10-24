@@ -33,7 +33,9 @@ if (arg) {
   server.registerResource('dsh-observer', resourceUri, { title: 'DSH 执行记录', mimeType: 'text/html;profile=mcp-app' }, async () => ({
     contents: [{ uri: resourceUri, mimeType: 'text/html;profile=mcp-app',
       text: await readFile(new URL('../dist/observer.html', import.meta.url), 'utf8'),
-      _meta: { ui: { prefersBorder: true }, 'openai/ui': { availableDisplayModes: ['inline', 'fullscreen'], preferredDisplayMode: 'inline' } },
+      // MCP Apps blocks nested frames by default. Only allow the loopback
+      // origin served by this bridge; task ports vary between runtimes.
+      _meta: { ui: { prefersBorder: true, csp: { frameDomains: ['http://127.0.0.1:*'] } }, 'openai/ui': { availableDisplayModes: ['inline', 'fullscreen'], preferredDisplayMode: 'inline' } },
     }],
   }));
   add('ds_bridge', 'Inspect native bridge tasks or explicitly turn new dispatches on/off. Turning off does not interrupt running tasks.', {

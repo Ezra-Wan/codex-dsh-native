@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { McpUiResourceMetaSchema } from '@modelcontextprotocol/ext-apps';
 
 test('MCP initialization, tools and switch work over real stdio without model calls', async () => {
   const root = await mkdtemp(join(tmpdir(), 'dsh-mcp-test-'));
@@ -31,6 +32,8 @@ test('MCP initialization, tools and switch work over real stdio without model ca
     assert.equal(resource.contents[0].mimeType, 'text/html;profile=mcp-app');
     assert.match(resource.contents[0].text, /执行记录/);
     assert.equal(resource.contents[0]._meta['openai/ui'].preferredDisplayMode, 'inline');
+    const uiMeta = McpUiResourceMetaSchema.parse(resource.contents[0]._meta.ui);
+    assert.deepEqual(uiMeta.csp.frameDomains, ['http://127.0.0.1:*'], 'the real stdio resource grants nested task pages on loopback only');
     const get = async args => {
       const result = await client.callTool({ name: 'ds_bridge', arguments: args });
       assert.equal(result.isError, undefined);
