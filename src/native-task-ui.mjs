@@ -4,13 +4,15 @@ import { z } from 'zod';
 import { NativeWebPeer } from './native-web-peer.mjs';
 import { nativeTaskBootstrap } from './native-task-bootstrap.mjs';
 
-export const NATIVE_TASK_URI = 'ui://dsh-native/task-v2.html';
+export const NATIVE_TASK_URI = 'ui://dsh-native/task-v3.html';
 const publicTask = ({ nativeUrl, ...task }) => ({ ...task, nativeViewAvailable: typeof nativeUrl === 'string' });
 
 // The same registration is used by the production switch and the isolated
 // zero-model fixture server. A view capability is private _meta, not model text.
 export function registerNativeTaskUi(server, { resolveTask, listTasks, retainView, peerFactory = url => new NativeWebPeer(url), onSignal = () => {} }) {
   const views = new Map();
+  const presentation = new Map();
+  const presentedTask = task => ({ ...publicTask(task), presentation: presentation.get(task.agent_id) ?? { collapsed: false, revision: 0 } });
   const closeView = id => {
     const view = views.get(id);
     if (!view) return;
@@ -43,7 +45,12 @@ export function registerNativeTaskUi(server, { resolveTask, listTasks, retainVie
     }],
   }));
   add('native_tasks', {}, async () => ({ items: (await listTasks()).map(publicTask) }));
-  add('native_state', { agent_id: agent }, async ({ agent_id }) => publicTask(await resolveTask(agent_id, false)));
+  add('native_state', { agent_id: agent }, async ({ agent_id }) => presentedTask(await resolveTask(agent_id, false)));
+  add('native_presentation', { agent_id: agent, collapsed: z.boolean() }, async ({ agent_id, collapsed }) => {
+    await resolveTask(agent_id, false);
+    const state = { collapsed, revision: (presentation.get(agent_id)?.revision ?? 0) + 1 };
+    presentation.set(agent_id, state); return state;
+  });
   add('native_bootstrap', { agent_id: agent }, async ({ agent_id }) => {
     const task = await resolveTask(agent_id, true);
     if (!task.nativeUrl) throw new Error('This task has no live native view; continue the task to reopen its runtime');
@@ -55,7 +62,7 @@ export function registerNativeTaskUi(server, { resolveTask, listTasks, retainVie
       const bootstrap = await nativeTaskBootstrap(peer);
       const id = randomUUID();
       views.set(id, { peer, release, agentId: agent_id, url: task.nativeUrl, generation: task.runtimeGeneration, touched: Date.now() });
-      return { viewId: id, task: publicTask(task), bootstrap };
+      return { viewId: id, task: presentedTask(task), bootstrap };
     } catch (error) { peer?.close(); await release?.(); throw error; }
   });
   add('native_asset', { viewId: capability, path: z.string().max(20000) }, async ({ viewId, path }) => ({ code: await (await get(viewId)).peer.asset(path) }));
