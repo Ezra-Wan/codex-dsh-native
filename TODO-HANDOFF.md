@@ -1,6 +1,6 @@
 # 下一模型交接：Codex 内可观察的原生 DSH 协作
 
-更新：2026-10-24，Asia/Shanghai。**主展示链路已按验收方向重构**：observer 卡片改为官方 Web 原实现的容器适配层（iframe + 降级面板；MCP server 启动自动拉起 native-replay，`ds_bridge` 返回 `nativeReplay.url`）；`ui/prototype/` 自写渲染降级为参考样例，不在主链路。同时修复验收报告四缺陷（markdown 栈溢出、运行中子会话 ds_events、接管探测目录层级、第二轮 takeover 漏报），回归测试 `test/review-regression.test.mjs`。**重要实测发现：ZCode 内嵌浏览器本身就是 MCP Apps 宿主**（容器卡片在本地 IAB 中拿到了真实 ds_bridge 数据）——宿主能力不再是假设，iframe 嵌入待新 server 重载后实测。
+更新：2026-10-24（二次），Asia/Shanghai。**主展示链路已按验收方向重构**：observer 卡片改为官方 Web 原实现的容器适配层（iframe + 降级面板；MCP server 启动自动拉起 native-replay，`ds_bridge` 返回 `nativeReplay.url`；布局决策只认 nativeReplay 字段，两种到达顺序不互相隐藏）。验收四缺陷已修 + 回归测试 `test/review-regression.test.mjs`（fixture 已入库 `test/fixtures/`，跨机器可复现）；外部活动保护以 `lastSelfWriteAt` 区分自身写入；`ds_start(backend:'worker')` 显式分流至保留的 deepseek_worker。**`ui/prototype/` 参考实现已整体归档**（chore/retire-prototype，历史在 git），共享资产 `ui/theme.css` 保留。Git 工作流规则落档 `docs/git-workflow.md` + commit-msg 钩子（`git config core.hooksPath .githooks`）。**重要实测发现：ZCode 内嵌浏览器本身就是 MCP Apps 宿主**——宿主能力不再是假设，iframe 嵌入待新 server 重载后实测。
 
 ## 目标与工作边界
 
