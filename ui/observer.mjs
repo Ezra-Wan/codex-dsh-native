@@ -106,6 +106,15 @@ export function createCard({ app, doc = globalThis.document }) {
   }
 
   function mountOfficial(url) {
+    const frameDomains = app.getHostCapabilities?.()?.sandbox?.csp?.frameDomains;
+    if (Array.isArray(frameDomains) && frameDomains.length === 0) {
+      // Use the host's effective grant, not merely our requested metadata.
+      // This Codex build strips HTTP frame origins before initializing us.
+      delete $('frame').dataset.mounted;
+      renderFallback('当前应用未允许内嵌此 DSH 页面。可点「新窗口打开」查看；卡片内正文暂不可用。');
+      $('open').href = url;
+      return;
+    }
     // Restore the embed explicitly: a later fallback must never leave the
     // frame hidden once a valid URL arrives, in either arrival order.
     $('fallback').style.display = 'none';

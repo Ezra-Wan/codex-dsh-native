@@ -403,3 +403,17 @@ test('an explicitly pending task stays in its waiting view instead of showing gl
   assert.equal(doc.byId.get('frame').dataset.mounted, undefined);
   assert.equal(doc.byId.get('fallback').style.display, 'block');
 });
+
+test('an explicit host denial shows a useful fallback without navigating a blocked frame', () => {
+  const doc = fakeDom();
+  const app = fakeApp();
+  app.getHostCapabilities = () => ({ sandbox: { csp: { frameDomains: [] } } });
+  const card = createCard({ app, doc });
+  const url = 'http://127.0.0.1:18911/?token=synthetic-policy-test';
+  card.receive({ agent_id: 'aaaaaaaa-0000-0000-0000-000000000001', status: 'running', nativeUrl: url });
+  assert.equal(doc.byId.get('frame').src, '', 'do not navigate into a known host block');
+  assert.equal(doc.byId.get('frame').style.display, 'none');
+  assert.equal(doc.byId.get('frame').dataset.mounted, undefined);
+  assert.match(doc.byId.get('notice').textContent, /未允许内嵌/);
+  assert.equal(doc.byId.get('open').href, url, 'external opening remains an explicit user action');
+});
