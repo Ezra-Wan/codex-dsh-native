@@ -1,6 +1,16 @@
 // Codex owns expand/collapse/close controls. The app only negotiates its open
 // height; it has no second, competing "collapsed" presentation state.
-export function createNativeTaskLayout({ app, doc, changed = () => {} }) {
+export async function requestNativeViewClose(app, host = globalThis.openai) {
+  // Optional documented host extension. Detect it, never assume Codex has
+  // the ChatGPT shim. The standard notification remains the fallback.
+  if (typeof host?.requestClose === 'function') {
+    try { await host.requestClose(); return 'openai'; } catch { /* fall back */ }
+  }
+  await app.requestTeardown();
+  return 'mcp';
+}
+
+export function createNativeTaskLayout({ app, doc, changed = () => {}, close = () => requestNativeViewClose(app) }) {
   let mode = 'inline', lastSize, repaired = false, closing = false;
   const apply = (force = false) => {
     const full = mode === 'fullscreen';
@@ -29,7 +39,7 @@ export function createNativeTaskLayout({ app, doc, changed = () => {} }) {
       // A request, not proof of closure. If accepted, the host sends our
       // ordinary teardown callback. Never blank the body or stop the model
       // runtime ourselves while waiting for the host's decision.
-      if (closing) await app.requestTeardown();
+      if (closing) await close();
     },
     mounted() { repaired = false; apply(true); },
   };

@@ -1,6 +1,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createNativeTaskLayout } from '../ui/native-task-layout.mjs';
+import { createNativeTaskLayout, requestNativeViewClose } from '../ui/native-task-layout.mjs';
+
+test('documented close extension is optional and never emits a duplicate successful close request', async()=>{
+  const calls=[];
+  const app={requestTeardown:async()=>calls.push('mcp')};
+  assert.equal(await requestNativeViewClose(app,{requestClose:async()=>calls.push('openai')}),'openai');
+  assert.deepEqual(calls,['openai']);
+  assert.equal(await requestNativeViewClose(app,{}),'mcp');
+  assert.equal(await requestNativeViewClose(app,{requestClose:async()=>{throw Error('extension unavailable');}}),'mcp');
+  assert.deepEqual(calls,['openai','mcp','mcp']);
+});
 
 function setup() {
   const sizes=[],doc={documentElement:{style:{}},body:{style:{}}},root={style:{}};
