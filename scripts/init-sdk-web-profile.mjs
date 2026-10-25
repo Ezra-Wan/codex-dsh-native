@@ -7,7 +7,7 @@
 // Usage: node scripts/init-sdk-web-profile.mjs [--home <dsh-home>]
 import { mkdir, writeFile, cp, access, readdir } from 'node:fs/promises';
 import { constants } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { WEB_RUNTIME_PATCH } from '../src/web-profile.mjs';
@@ -30,9 +30,8 @@ if (await exists(profileManifest)) {
   console.log('sdk-web profile present; adapter copy and browser settings refreshed.');
   process.exit(0);
 }
-if (!(await exists(join(profiles, 'web')))) {
-  throw new Error(`Template profile missing: ${join(profiles, 'web')} (initialize the home once via the SDK first)`);
-}
+// This manifest is self-contained; a new installation must not depend on an
+// unrelated pre-existing Web profile or a first paid task to initialize it.
 
 await mkdir(join(profileDir, 'web-embed'), { recursive: true });
 await cp(join(root, 'adapter', 'web-embed'), join(profileDir, 'web-embed'), { recursive: true });
@@ -66,25 +65,29 @@ await writeFile(join(profileDir, 'package.json'), JSON.stringify({
 await writeFile(join(profileDir, 'pnpm-workspace.yaml'), 'packages:\n  - ./web-embed\n');
 await writeFile(join(profileDir, 'cordis.yml'), '# dsh profile root — composed as patches (see the web profile note).\n[]\n');
 await writeFile(join(profileDir, 'cordis.patch.yml'), WEB_RUNTIME_PATCH, 'utf8');
+if(process.argv.includes('--prepare-only')){
+  console.log('sdk-web profile files prepared; no installation, service or model started.');
+  process.exit(0);
+}
 
 console.log('Installing sdk-web profile dependencies (pnpm install; no services started)...');
-const pnpm = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
-const result = spawnSync(pnpm, ['install', '--dir', profileDir], {
+let pnpm='pnpm',prefix=[];
+if(process.platform==='win32'){
+  const lookup=spawnSync('where.exe',['pnpm.cmd'],{encoding:'utf8',windowsHide:true});
+  if(lookup.status!==0)throw Error('pnpm is required to install the isolated sdk-web profile');
+  const entry=process.env.CODEX_DSH_PNPM_ENTRY??join(dirname(lookup.stdout.trim().split(/\r?\n/)[0]),'node_modules/pnpm/bin/pnpm.cjs');
+  await access(entry);pnpm=process.execPath;prefix=[entry];
+}
+const result = spawnSync(pnpm, [...prefix,'install', '--dir', profileDir], {
   stdio: 'pipe',
-  shell: process.platform === 'win32',
+  shell: false, windowsHide: true,
   env: { ...process.env, PNPM_ALLOW_SCRIPTS: 'true' },
   encoding: 'utf8',
 });
 if (result.status !== 0) {
   const output = `${result.stdout ?? ''}${result.stderr ?? ''}`;
-  // ERR_PNPM_IGNORED_BUILDS is an approval warning; packages resolve fine and
-  // native builds are irrelevant to booting the profile (already built in the
-  // shared store by the main project's installs).
-  if (!/ERR_PNPM_IGNORED_BUILDS/.test(output)) {
-    console.error(output);
-    throw new Error(`pnpm install failed with status ${result.status}`);
-  }
-  console.log('pnpm install completed (build-script approval warning ignored; native deps prebuilt in the shared store).');
+  console.error(output);
+  throw new Error(`pnpm install failed with status ${result.status}; profile files remain for inspection, installation is not accepted`);
 }
 const installed = await readdir(join(profileDir, 'node_modules', '@deepseek-ai')).catch(() => []);
 console.log(`sdk-web profile ready (installed ${installed.length} @deepseek-ai packages).`);
