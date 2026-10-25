@@ -5,6 +5,7 @@ import { createNativeTaskController } from './native-task-controller.mjs';
 import { registerSessionTarget } from './native-session-target.mjs';
 import { splitNativeFonts, installNativeFonts } from './native-fonts.mjs';
 import { createNativeTaskLayout } from './native-task-layout.mjs';
+import { createNativeDisplayMode, registerNativePresentation } from './native-presentation.mjs';
 
 const app = new App({ name: 'DSH native task', version: '1' }, { availableDisplayModes: ['inline', 'fullscreen'] }, { autoResize: false });
 const root = document.getElementById('root'), status = document.getElementById('state'), tasks = document.getElementById('tasks');
@@ -19,9 +20,11 @@ const execute = code => { const el = document.createElement('script'); el.textCo
 const css = document.createElement('style'); document.head.appendChild(css);
 let selected, polling = false, timer;
 let lastMode;
+const nativeMode = createNativeDisplayMode();
 const layout = createNativeTaskLayout({ app, doc: document, root,
   persist: (agent_id, collapsed) => rawCall('native_presentation', { agent_id, collapsed }),
   changed: ({ mode, collapsed }) => {
+    nativeMode.set(mode);
     document.getElementById('flow').hidden = mode === 'fullscreen';
     document.getElementById('flow').textContent = collapsed ? '流内展开' : '收起流内';
     document.getElementById('expand').textContent = mode === 'fullscreen' ? '关闭侧边' : '侧边查看';
@@ -45,13 +48,14 @@ const controller = createNativeTaskController({ call: rawCall,
     await installNativeFonts(styles.fonts);
     globalThis.__DSH_TRANSPORT__ = { rpc,
       loadBundle: async url => {
-        if (new URL(url, location.href).pathname === '/codex-session-target.js') return;
+        if (['/codex-session-target.js', '/codex-native-presentation.js'].includes(new URL(url, location.href).pathname)) return;
         const { code } = await call('native_asset', { path: url }); execute(code);
       },
     };
     const target = () => task.session_id;
     registerSessionTarget({ loader: globalThis.__ModuleLoader__, boot: globalThis.__DSH_BOOT__, readTarget: target,
       onNavigate: value => { void signal('native-session-selected', JSON.stringify(value)); } });
+    registerNativePresentation({ loader: globalThis.__ModuleLoader__, boot: globalThis.__DSH_BOOT__, mode: nativeMode });
     const entry = new AppWebEntry(root);
     try { await entry.run(error => { throw error; }); }
     catch (error) { rpc.dispose(); await entry.dispose(); throw error; }
@@ -100,7 +104,7 @@ window.addEventListener('unhandledrejection', event => { void signal('rejection'
 app.onteardown = async () => { clearInterval(timer); await controller.dispose(); return {}; };
 await app.connect();
 await layout.context(app.getHostContext());
-void signal('native-card-connected', `task-v3; ${crypto.randomUUID()}; autoResize=false`);
+void signal('native-card-connected', `task-v4; ${crypto.randomUUID()}; autoResize=false`);
 await installNativeFonts(globalThis.__DSH_NATIVE_FONTS__ ?? []);
 delete globalThis.__DSH_NATIVE_FONTS__;
 timer = setInterval(async () => {
