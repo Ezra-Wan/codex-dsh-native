@@ -69,10 +69,11 @@ const allowed = new Set(['session/list','session/page','session/follow','session
   'skills/list','$events','$events/result','settings/describe','settings/snapshot','agentPresets/list','dynamicCordisRunner/inventory','schedule/catalog','schedule/list','subagents/list']);
 const server=new McpServer({name:'dsh-native-task-fixture',version:'1'},{instructions:'Zero-model original DSH task-card acceptance. Only show_native_task_probe once, then the user checks automatic history selection and A/B switching. No paid model tasks, no external DSH tools. Never claim visual acceptance yourself.'});
 const ui=registerNativeTaskUi(server,{
+  diagnostics:true,
   listTasks:async()=>[...states.values()].map(state=>state.task),
   resolveTask:async(id,wait)=>{const state=states.get(id);if(!state)throw new Error('Unknown fixture task');if(wait)await ensure(state);return state.task;},
   peerFactory:url=>new NativeWebPeer(url,{allow:endpoint=>allowed.has(endpoint)}),
-  onSignal:async args=>{facts.signals.push({...args,at:new Date().toISOString()});facts.signals=facts.signals.slice(-60);await save();},
+  onSignal:async args=>{facts.signals.push({...args,at:new Date().toISOString()});facts.signals=facts.signals.slice(-200);await save();},
 });
 server.registerTool('show_native_task_probe',{title:'DSH 原生任务 · 复用验收',description:'Display the production native card against two isolated read-only fixture runtimes. Zero model calls.',inputSchema:{},_meta:{ui:{resourceUri:NATIVE_TASK_URI}}},async()=>({
   content:[{type:'text',text:'Zero-model native task view; automatic selection and A/B display require user observation.'}],

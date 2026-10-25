@@ -118,6 +118,7 @@ test('a view capability is private, generation-scoped, and revocation releases o
     B:{agent_id:'B',session_id:'session-B',nativeUrl:'http://127.0.0.1:19002/?token=secret-B',runtimeGeneration:1}};
   const server={registerTool(name,config,handler){handlers.set(name,handler);},registerResource(){}};
   const ui=registerNativeTaskUi(server,{
+    diagnostics:true,
     resolveTask:async id=>states[id],listTasks:async()=>Object.values(states),
     retainView:async id=>{retained.push(id);return async()=>{released.push(id);};},
     peerFactory:url=>{const peer={url,closed:false,shell:async()=>'',close(){this.closed=true;},rpc:async()=>({ok:true})};peers.push(peer);return peer;},
@@ -126,6 +127,7 @@ test('a view capability is private, generation-scoped, and revocation releases o
     const a=await handlers.get('native_bootstrap')({agent_id:'A'}), b=await handlers.get('native_bootstrap')({agent_id:'B'});
     assert.doesNotMatch(JSON.stringify(a),/secret-A/,'launch tokens never enter native UI responses');
     assert.equal(a._meta.payload.task.nativeViewAvailable,true);
+    assert.equal(a._meta.payload.bootstrap.diagnostics,true,'DOM evidence is explicitly opted in on the private bootstrap');
     assert.deepEqual(a.content,[{type:'text',text:'Native view response'}]);
     states.A.runtimeGeneration=2;
     const revoked=await handlers.get('native_rpc')({viewId:a._meta.payload.viewId,endpoint:'session/list',payload:{}});
