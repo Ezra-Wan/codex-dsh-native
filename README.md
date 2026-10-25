@@ -4,7 +4,9 @@
 
 Codex 保留自己的登录、工作区与运行环境；DeepSeek 在官方 DSH 的完整 SDK profile 中工作。桥接负责发任务、保留会话身份、展示原生执行事件、等待结果和中断，不自己实现模型循环、工具体系或上下文压缩。
 
-**当前状态（2026-10-25）：第二实例已目视确认新 MCP 卡片的原版 DSH 真实正文流、目标历史自动导航和 A/B 正文；普通输入区及新建/自动化入口隐藏也已确认。一次真实任务结束前，同一正文节点取得 17 次增长取样；当前 86/86 离线通过。正式桥通过 `CODEX_DSH_UI=mcp` 显式启用，主实例尚未切换。侧边关闭仍有短暂闪回；任务接管、原生子 agent/完整操作、worker 统一兜底和插件仍待交付或验收。**
+**当前状态（2026-10-25）：原版 DSH 正文流与 A/B 已目视确认；106/106 离线通过。已实测原生文件产物、同会话冷续接、并行独立停止、真正 native 子 agent，以及失败后转交真实旧 worker。冷历史零 prompt 重挂已有真实运行时证据；worker 降级观察窗仍待宿主目视确认。主实例未切换。接管、审批/压缩完整交互、OPS 和侧边余额仍未完成。** 详见 [替代 worker 验收及蓝屏恢复](docs/acceptance-worker-replacement-20261025.md)。
+
+**尚不能完全替代 work**：原生代码修改正确，但新版 Windows PowerShell 沙箱发生 Win32 5 初始化错误；同一条测试命令转交旧 worker 后真实执行成功（3 pass，已读取工具结果）。目前适合原生优先、明确失败后 worker 兜底；隔离目录的官方权限诊断修复等待用户确认。
 
 下一模型先读 [TODO-HANDOFF.md](TODO-HANDOFF.md)：包含原生界面复用、流式接入、侧边入口、当前证据和成本约束。
 
@@ -22,12 +24,18 @@ Codex 保留自己的登录、工作区与运行环境；DeepSeek 在官方 DSH 
 | `ds_start` | 发起任务，立即返回 `agent_id`；调用方继续独立工作 |
 | `ds_wait` | 最多等待 50 秒，返回进度或最终结果 |
 | `ds_followup` | 同一个任务的后续工作，恢复同一个原生会话 |
+| `ds_review` | 对 worker 交付明确 pass/revise，保留旧 worker 的返修预算 |
+| `ds_fallback` | 确认原生停机后把失败或被明确拒收的交付转交旧 worker；重复调用不重复派发 |
 | `ds_stop` | 停止这一任务的 DSH 进程，保留原生历史 |
 | `ds_events` | 按游标读取原生工具调用、结果、可见回复和回合边界，不调用模型 |
 | `ds_observe` | 请求在当前对话中展示一个任务的执行记录，需要宿主支持 MCP Apps |
 | `ds_panel` | 声明可由用户打开的会话内容面板入口，供并行任务切换查看 |
 
 桥接默认关闭。调用 `ds_bridge({"enabled":true})` 后才允许发起任务。关闭开关阻止新的任务和续接，不中断正在运行的任务；中断使用 `ds_stop`。
+
+`ds_start(backend:"worker")` 现在真正连接已登记的 `deepseek_worker`，需要稳定 `issue_id`。它有独立 wrapper ID 和 `worker_agent_id`，等待/事件/验收/续接/停止仍走同一套工具。保留原安装与服务，不复制其源码或凭据。默认读取当前 CODEX_HOME/config.toml；隔离实例需要 `CODEX_DSH_WORKER_CONFIG` 指向保留 worker 的配置。
+
+原生交付不合格时，用 `ds_fallback` 提供检查后的剩余工作；若原协议已 completed，还必须说明 `rejectionReason`。running/unknown/用户主动 interrupted 不自动重跑。旧 worker 没有逐任务输出 cap，显式不支持的 maxTokens 会在派发前拒绝；省略则明确由 worker policy 控制。worker 观察窗只显示实际状态、结果和工具证据，不冒充原生正文流。
 
 可以直接告诉 Codex：
 
@@ -99,7 +107,7 @@ node src/server.mjs --disable
 node src/server.mjs --status
 ```
 
-本项目状态默认在 `.local`，原生 DSH_HOME 位于 `.local/dsh-home`。使用 `CODEX_DSH_BRIDGE_HOME` 可为另一套环境指定不同状态目录。安装不升级或迁移旧的 `D:\@harness\dsh`，不调用旧 bridge 的 review 状态机。
+本项目状态默认在 `.local`，原生 DSH_HOME 位于 `.local/dsh-home`。使用 `CODEX_DSH_BRIDGE_HOME` 可指定隔离目录。安装不升级或迁移旧的 `D:\@harness\dsh`。worker 后端调用其真实 review 状态机，native 不伪造同样的 review 账本。
 
 MCP 配置新增后，需要由 Codex 重新加载服务；当前已开始的聊天不保证动态出现新工具。可从设置重新加载，或在重新打开应用后的聊天中使用。
 

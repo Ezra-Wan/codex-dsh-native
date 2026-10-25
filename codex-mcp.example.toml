@@ -11,3 +11,8 @@ enabled = true
 [mcp_servers.dsh_native_p0.env]
 # Legacy 8792 replay must not start merely because Codex loads this MCP.
 DSH_NATIVE_REPLAY = "off"
+# Verified native frontend over MCP, avoiding blocked loopback iframes.
+CODEX_DSH_UI = "mcp"
+# Worker defaults to deepseek_worker in this Codex home's config.toml.
+# An isolated Codex home can set CODEX_DSH_WORKER_CONFIG to the retained
+# worker's original config path; do not duplicate its installation/credentials.
