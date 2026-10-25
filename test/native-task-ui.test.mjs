@@ -17,7 +17,7 @@ test('the installed native module parser accepts our receiver and rejects its pr
   runInNewContext(source,{window:{__ModuleLoader__:{load:entry=>{factory=entry.factory;}}}});
   const {parseBootManifest}=factory(()=>{throw new Error('The native parser needs no external module');});
   const workspace='@deepseek-ai/dsh-client-ui-workspace';
-  const deps=[workspace,'@deepseek-ai/dsh-client-ui-layout','@deepseek-ai/dsh-client-ui-sidebar-right'];
+  const deps=[workspace,'@deepseek-ai/dsh-client-ui-layout','@deepseek-ai/dsh-client-ui-sidebar-right','@deepseek-ai/dsh-client-locale'];
   const boot={rev:'native-receiver-contract',entries:deps.map(id=>({id,url:'/workspace.js',rev:'1'})),
     batches:[{phase:'application',url:'/workspace.js',rev:'1',entries:deps}]};
   registerSessionTarget({loader:{load(){}},boot,readTarget:()=>undefined});

@@ -15,7 +15,7 @@ test('production MCP switch exposes native carrier on dispatch without starting 
       env:{...process.env,CODEX_DSH_BRIDGE_HOME:root,CODEX_DSH_UI:'mcp',DSH_NATIVE_REPLAY:'off'},stderr:'pipe'}));
     const {tools}=await client.listTools();
     const uri=tools.find(tool=>tool.name==='ds_start')._meta.ui.resourceUri;
-    assert.equal(uri,'ui://dsh-native/task-v8.html');
+    assert.equal(uri,'ui://dsh-native/task-v9.html');
     for(const name of ['native_bootstrap','native_rpc','native_stream_open','native_stream_send','native_view_close']){
       assert.deepEqual(tools.find(tool=>tool.name===name)._meta.ui.visibility,['app']);
     }
