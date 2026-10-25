@@ -26,8 +26,11 @@ const layout = createNativeTaskLayout({ app, doc: document, root,
   changed: ({ mode, collapsed }) => {
     nativeMode.set(mode);
     document.getElementById('flow').hidden = mode === 'fullscreen';
-    document.getElementById('flow').textContent = collapsed ? '流内展开' : '收起流内';
-    document.getElementById('expand').textContent = mode === 'fullscreen' ? '关闭侧边' : '侧边查看';
+    document.getElementById('flow').textContent = collapsed ? '▾ 在对话内展开' : '▴ 收起对话内视图';
+    document.getElementById('flow').setAttribute('aria-expanded', String(!collapsed));
+    document.getElementById('flow').setAttribute('aria-controls', 'root');
+    document.getElementById('expand').textContent = mode === 'fullscreen' ? '关闭侧边视图' : '▥ 在侧边查看';
+    document.getElementById('expand').title = mode === 'fullscreen' ? '返回对话，保持对话内视图收起' : '请求 Codex 在侧边区域打开原生 DSH';
   },
 });
 const controller = createNativeTaskController({ call: rawCall,
@@ -104,7 +107,7 @@ window.addEventListener('unhandledrejection', event => { void signal('rejection'
 app.onteardown = async () => { clearInterval(timer); await controller.dispose(); return {}; };
 await app.connect();
 await layout.context(app.getHostContext());
-void signal('native-card-connected', `task-v4; ${crypto.randomUUID()}; autoResize=false`);
+void signal('native-card-connected', `task-v5; ${crypto.randomUUID()}; autoResize=false`);
 await installNativeFonts(globalThis.__DSH_NATIVE_FONTS__ ?? []);
 delete globalThis.__DSH_NATIVE_FONTS__;
 timer = setInterval(async () => {

@@ -8,6 +8,12 @@ html[data-codex-native-mode="inline"] #root :has(> [data-rightbar-col]) {
   grid-template-columns: 0px minmax(0px, 1fr) 0px !important;
   transition: none !important;
 }
+/* display:none removes the left column from grid auto-placement. Keep the
+   ORIGINAL center (the rightbar's preceding sibling) in the 1fr track. */
+html[data-codex-native-mode="inline"] #root :has(> [data-rightbar-col]) > :has(+ [data-rightbar-col]) {
+  grid-column: 2 !important;
+  grid-row: 1 !important;
+}
 html[data-codex-native-mode="inline"] #root :has(> [data-rightbar-col]) > :first-child,
 html[data-codex-native-mode="inline"] #root [data-rightbar-col],
 html[data-codex-native-mode="inline"] #root :has(> [data-rightbar-col]) > [data-side],
