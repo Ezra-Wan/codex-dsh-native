@@ -10,6 +10,11 @@ import { observeNativeRendering } from './native-render-evidence.mjs';
 
 const app = new App({ name: 'DSH native task', version: '1' }, { availableDisplayModes: ['inline', 'fullscreen'] }, { autoResize: false });
 const root = document.getElementById('root'), status = document.getElementById('state'), tasks = document.getElementById('tasks');
+function showLoading(message, busy = true) {
+  const mask = document.getElementById('native-loading');
+  mask.hidden = false; mask.dataset.busy = String(busy);
+  document.getElementById('native-loading-message').textContent = message;
+}
 const rawCall = async (name, args = {}) => {
   const result = await app.callServerTool({ name, arguments: args });
   if (result.isError) throw new Error(result.content?.find(item => item.type === 'text')?.text ?? 'Native view request failed');
@@ -26,9 +31,10 @@ const layout = createNativeTaskLayout({ app, doc: document, root,
   changed: ({ mode }) => nativeMode.set(mode),
 });
 const controller = createNativeTaskController({ call: rawCall,
-  waiting(task) { selected = task.agent_id; root.style.visibility = 'hidden'; status.textContent = task.nativeViewAvailable === false && !['starting','running'].includes(task.status) ? '原生运行时已释放，续接后恢复' : '正在连接原生会话…'; },
-  failed(error) { status.textContent = error.message; void signal('native-view-failed', error.message); },
+  waiting(task) { selected = task.agent_id; root.style.visibility = 'hidden'; const released = task.nativeViewAvailable === false && !['starting','running'].includes(task.status); status.textContent = released ? '原生运行时已释放，续接后恢复' : '正在连接原生会话…'; showLoading(status.textContent, !released); },
+  failed(error) { status.textContent = error.message; showLoading(error.message, false); void signal('native-view-failed', error.message); },
   async mount({ viewId, task, bootstrap }) {
+    showLoading('正在加载原生 DSH 界面…');
     // Capture this capability, never route an old stream through a new task.
     const call = (name, args) => rawCall(name, { ...args, viewId });
     const rpc = createNativeMcpRpc(call);
@@ -55,6 +61,7 @@ const controller = createNativeTaskController({ call: rawCall,
     try { await entry.run(error => { throw error; }); }
     catch (error) { rpc.dispose(); await entry.dispose(); throw error; }
     root.style.visibility = 'visible'; status.textContent = `${task.name || 'DSH'} · ${task.role === 'sub' ? '派生任务' : '协作工作区'} · ${task.status}`;
+    document.getElementById('native-loading').hidden = true;
     layout.mounted();
     void signal('native-view-mounted', task.session_id);
     const stopEvidence = bootstrap.diagnostics ? observeNativeRendering(root, { mode: nativeMode,
@@ -91,7 +98,7 @@ window.addEventListener('unhandledrejection', event => { void signal('rejection'
 app.onteardown = async () => { clearInterval(timer); await controller.dispose(); return {}; };
 await app.connect();
 await layout.context(app.getHostContext());
-void signal('native-card-connected', `task-v7; ${crypto.randomUUID()}; autoResize=false`);
+void signal('native-card-connected', `task-v8; ${crypto.randomUUID()}; autoResize=false`);
 await installNativeFonts(globalThis.__DSH_NATIVE_FONTS__ ?? []);
 delete globalThis.__DSH_NATIVE_FONTS__;
 timer = setInterval(async () => {
