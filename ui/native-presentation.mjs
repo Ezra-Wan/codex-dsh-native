@@ -1,5 +1,5 @@
 // Presentation only. Native services, stores, session scopes and plugin tools
-// stay mounted; fullscreen restores the original occupants without a new app.
+// stay mounted; fullscreen restores original drawers without a new app.
 // DSH 0.2.1-rc.2 has no public "remove columns" action. Its stable frame data
 // attributes identify the original three-column frame; no hashed class names
 // or copied conversation DOM are involved.
@@ -45,6 +45,13 @@ export function registerNativePresentation({ loader, boot, mode, doc = document 
       const style = doc.createElement('style');
       style.textContent = INLINE_NATIVE_CSS;
       doc.head.appendChild(style);
+      // Bridge-owned task views do not offer a second free-text prompter.
+      // Hide only the resident composer BAR through its native slot. Keep
+      // the separate composer chain intact (native questions/approvals and
+      // true subagent read-only replacements own that interaction surface).
+      // This is UI policy, not an RPC authorization or takeover state machine.
+      const disposeComposerPolicy = ctx.slots.inject('conversation.composer.bar',
+        () => ctx.slots.register({ name: 'conversation.composer.bar', priority: -1000 }, () => null));
       let unshadow;
       const sync = () => {
         const inline = mode.getSnapshot() !== 'fullscreen';
@@ -58,7 +65,7 @@ export function registerNativePresentation({ loader, boot, mode, doc = document 
       };
       const off = mode.subscribe(sync);
       sync();
-      return () => { off(); unshadow?.(); style.remove(); delete doc.documentElement.dataset.codexNativeMode; };
+      return () => { off(); unshadow?.(); disposeComposerPolicy(); style.remove(); delete doc.documentElement.dataset.codexNativeMode; };
     },
   }) });
   boot.entries.push({ id, url: '/codex-native-presentation.js', rev: '1', immediately: true,
