@@ -571,7 +571,9 @@ export class Bridge {
   // observer card embeds its URL; failures degrade to the fallback panel.
   // Callers that must stay side-effect free (tests) check the env guard first.
   async ensureNativeReplay() {
-    if (process.env.DSH_NATIVE_REPLAY === 'off') return null;
+    // Legacy replay is opt-in. Each Codex MCP instance used to boot a web
+    // service even when no task or card was requested.
+    if (process.env.DSH_NATIVE_REPLAY !== 'on') return null;
     const current = await this.nativeReplay();
     if (current?.running !== false && current) return current;
     const script = fileURLToPath(new URL('../scripts/native-replay.mjs', import.meta.url));

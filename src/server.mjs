@@ -112,9 +112,7 @@ if (arg) {
   process.once('SIGTERM', () => { void close().catch(() => { process.exitCode = 1; }); });
   process.stdin.once('end', () => { void close().catch(() => { process.exitCode = 1; }); });
   await server.connect(new StdioServerTransport());
-  // The observer card embeds the official web UI; boot it out-of-band so the
-  // first open is ready. Failure only degrades the card to its fallback.
-  // DSH_NATIVE_REPLAY=off keeps tests (and other side-effect-free embedders)
-  // from ever spawning the local web process.
-  if (!nativeMcpUi && process.env.DSH_NATIVE_REPLAY !== 'off') bridge.ensureNativeReplay().catch(() => {});
+  // Retired loopback replay never starts implicitly. Task-owned runtimes and
+  // the MCP native UI are independent of this optional legacy service.
+  if (!nativeMcpUi && process.env.DSH_NATIVE_REPLAY === 'on') bridge.ensureNativeReplay().catch(() => {});
 }

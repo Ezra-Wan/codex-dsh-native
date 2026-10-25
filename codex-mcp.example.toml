@@ -7,3 +7,7 @@ env_vars = ['DEEPSEEK_API_KEY']
 startup_timeout_sec = 20
 tool_timeout_sec = 65
 enabled = true
+
+[mcp_servers.dsh_native_p0.env]
+# Legacy 8792 replay must not start merely because Codex loads this MCP.
+DSH_NATIVE_REPLAY = "off"
