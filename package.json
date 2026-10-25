@@ -1,6 +1,6 @@
 {
   "name": "codex-dsh-native-p0",
-  "version": "0.1.1",
+  "version": "0.1.2-preview.1",
   "private": true,
   "type": "module",
   "description": "Optional asynchronous MCP bridge to persistent native DeepSeek Harness sessions",
@@ -66,5 +66,10 @@
   "devDependencies": {
     "@deepseek-ai/dsh-client-modules": "0.2.1-rc.2",
     "esbuild": "0.28.2"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Ezra-Wan/codex-dsh-native.git"
   }
 }

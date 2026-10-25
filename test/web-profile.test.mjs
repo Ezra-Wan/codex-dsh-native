@@ -88,4 +88,7 @@ test('a fresh sdk-web profile can be prepared without any existing Web home or m
   assert.equal(profile.dependencies['@deepseek-ai/dsh-sdk-app'],'0.2.1-rc.2');
   const patch=parse(await readFile(join(home,'profiles/sdk-web/cordis.patch.yml'),'utf8'));
   assert.equal(patch[0].config.openBrowser,false);
+  const workspace=parse(await readFile(join(home,'profiles/sdk-web/pnpm-workspace.yaml'),'utf8'));
+  assert.equal(workspace.allowBuilds['koffi@3.1.1'],true);assert.equal(workspace.allowBuilds['@google/genai'],false);
+  assert.equal(workspace.allowBuilds.koffi,undefined,'future versions are not implicitly approved');
 });
