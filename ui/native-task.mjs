@@ -11,6 +11,7 @@ import { mountWorkerFallback } from './worker-fallback.mjs';
 
 const app = new App({ name: 'DSH native task', version: '1' }, { availableDisplayModes: ['inline', 'fullscreen'] }, { autoResize: false });
 const root = document.getElementById('root'), status = document.getElementById('state'), tasks = document.getElementById('tasks');
+function renderTaskStatus(task){status.textContent=`${task.name||'DSH'} · ${task.backend==='worker'?'旧 worker 兜底':task.role==='sub'?'派生任务':'协作工作区'} · ${task.status}${task.failure?.label?' · '+task.failure.label:''}`;status.title=task.error??'';}
 function showLoading(message, busy = true) {
   const mask = document.getElementById('native-loading');
   mask.hidden = false; mask.dataset.busy = String(busy);
@@ -34,7 +35,7 @@ const layout = createNativeTaskLayout({ app, doc: document, root,
 });
 const controller = createNativeTaskController({ call: rawCall,
   waiting(task) { selected = task.agent_id; document.getElementById('worker-fallback').hidden=true; root.style.visibility = 'hidden'; const released = task.nativeViewAvailable === false && !task.nativeViewRestorable && !['starting','running'].includes(task.status); status.textContent = task.backend==='worker'?'正在连接旧 worker…':released ? '该任务暂无可恢复的原生界面' : task.nativeViewRestorable&&!task.nativeViewAvailable?'正在恢复原生历史（不调用模型）…':'正在连接原生会话…'; showLoading(status.textContent, !released); },
-  failed(error) { status.textContent = error.message; showLoading(error.message, false); void signal('native-view-failed', error.message); },
+  failed(error) { const message=`观察连接失败（未确认执行中止）：${error.message}`;status.textContent = message; showLoading(message, false); void signal('native-view-failed', error.message); },
   worker(task){
     selected=task.agent_id;root.style.visibility='hidden';document.getElementById('native-loading').hidden=true;
     status.textContent='旧 worker 兜底 · 无原生正文流';
@@ -67,7 +68,7 @@ const controller = createNativeTaskController({ call: rawCall,
     const entry = new AppWebEntry(root);
     try { await entry.run(error => { throw error; }); }
     catch (error) { rpc.dispose(); await entry.dispose(); throw error; }
-    root.style.visibility = 'visible'; status.textContent = `${task.name || 'DSH'} · ${task.role === 'sub' ? '派生任务' : '协作工作区'} · ${task.status}`;
+    root.style.visibility = 'visible'; renderTaskStatus(task);
     document.getElementById('native-loading').hidden = true;
     layout.mounted();
     void signal('native-view-mounted', task.session_id);
@@ -87,7 +88,7 @@ function receive(data) {
     option.textContent = `${task.name || task.agent_id.slice(0, 8)} · ${task.backend==='worker'?'worker 兜底':task.role === 'sub' ? '派生任务' : '协作工作区'}`;
   }
   const task = data.agent_id ? data : items.find(item => item.agent_id === selected) ?? items.at(-1);
-  if (task?.agent_id) { selectionSeq++; tasks.value = task.agent_id; void controller.select(task); }
+  if (task?.agent_id) { selectionSeq++; tasks.value = task.agent_id; renderTaskStatus(task);void controller.select(task); }
 }
 app.ontoolresult = result => receive(result.structuredContent);
 let selectionSeq=0;
@@ -117,7 +118,7 @@ delete globalThis.__DSH_NATIVE_FONTS__;
 timer = setInterval(async () => {
   if (!selected || polling || document.hidden) return;
   polling = true;
-  try { const state = await rawCall('native_state', { agent_id: selected }); if (state.agent_id === selected) await controller.select(state); }
-  catch (error) { status.textContent = error.message; }
+  try { const state = await rawCall('native_state', { agent_id: selected }); if (state.agent_id === selected) { await controller.select(state);renderTaskStatus(state); } }
+  catch (error) { status.textContent = `${globalThis.navigator?.onLine===false?'本机报告网络离线':'读取任务状态失败'}（未确认执行中止）：${error.message}`; }
   finally { polling = false; }
 }, 5000);

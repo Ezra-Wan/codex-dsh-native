@@ -80,7 +80,10 @@ test('stopping a wrapped worker waits for its collector and does not interrupt a
 });
 
 test('a read-only wait transport failure after acceptance cannot classify the paid task as not sent or failed',async t=>{
-  const worker={async startArguments(){},async start(){return{agent_id:'accepted'};},async wait(){throw Object.assign(Error('read transport lost'),{mayHaveRun:false});},async close(){},async stop(){throw Error('unreachable');}};
+  let online=false,starts=0;
+  const worker={async startArguments(){},async start(){starts++;return{agent_id:'accepted'};},async wait(){if(online)return{status:'completed',wait_outcome:'settled',answer:'Original task completed'};throw Object.assign(Error('read transport lost'),{mayHaveRun:false,code:'ECONNRESET'});},async close(){},async stop(){throw Error('unreachable');}};
   const {tasks,args}=await setup(t,{worker});const receipt=await tasks.start(args);await tasks.entries.get(receipt.agent_id).done;
   const record=await tasks.read(receipt.agent_id);assert.equal(record.status,'unknown');assert.equal(record.submission,'acknowledged');assert.equal(record.workerAgentId,'accepted');
+  assert.equal(record.failure.kind,'connection_lost');online=true;
+  const recovered=await tasks.status(receipt.agent_id);assert.equal(recovered.status,'completed');assert.equal(recovered.final,'Original task completed');assert.equal(recovered.failure,undefined);assert.equal(starts,1);
 });

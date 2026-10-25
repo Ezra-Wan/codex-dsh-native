@@ -38,6 +38,7 @@ export function createCard({ app, doc = globalThis.document }) {
       }
     }
     const bits = [LABELS[status.status] ?? status.status];
+    if(status.failure?.label)bits.push(status.failure.label);
     if (status.children?.length) bits.push(`${status.children.length} 个子会话`);
     if (status.userTakeover) bits.push('用户接管中');
     $('state').textContent = bits.join(' · ');

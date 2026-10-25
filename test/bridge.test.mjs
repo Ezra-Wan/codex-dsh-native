@@ -194,9 +194,23 @@ test('stop closes only the requested task and a busy followup is rejected', asyn
   await ready(fake, 1);
   await assert.rejects(bridge.followup(first.agent_id, 'overlap'), /busy/);
   assert.equal((await bridge.stop(first.agent_id)).status, 'interrupted');
+  assert.equal((await bridge.status(first.agent_id)).failure.kind,'requested_stop');
   assert.equal(fake.instances[1].closed, false);
   fake.instances[1].finish();
   assert.equal((await bridge.wait(second.agent_id)).status, 'completed');
+});
+
+test('native network loss records its cause; a missing controller becomes unknown and cannot replay a prompt',async t=>{
+  const {root,bridge,fake}=await setup(t);await bridge.setEnabled(true);
+  bridge.networkSnapshot=()=>({localInterfaceAvailable:false,internetReachable:null});
+  const task=await bridge.start({cwd:root,task:'one request',webEmbed:false});
+  (await ready(fake)).reject(new Error('fetch failed',{cause:Object.assign(Error('down'),{code:'ENETDOWN'})}));
+  const failed=await bridge.wait(task.agent_id);assert.equal(failed.status,'failed');assert.equal(failed.failure.kind,'network_unavailable');
+  assert.equal((await bridge.read(task.agent_id)).failure.code,'ENETDOWN');assert.equal(fake.instances.length,1);
+  await bridge.release(task.agent_id);
+  const record=await bridge.read(task.agent_id);await bridge.save({...record,status:'running',failure:null});
+  const lost=await bridge.status(task.agent_id);assert.equal(lost.status,'unknown');assert.equal(lost.failure.kind,'controller_lost');
+  await assert.rejects(bridge.followup(task.agent_id,'do not replay'),/uncertain/);assert.equal(fake.instances.length,1);
 });
 
 test('another bridge instance cannot write an owned native session', async t => {

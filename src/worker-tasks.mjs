@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { atomicJson,MODES } from './bridge.mjs';
 import { WorkerMcpClient } from './worker-client.mjs';
 import {readJson} from './state-store.mjs';
+import {classifyFailure,localNetworkSnapshot} from './failure.mjs';
 
 const ID=/^[a-f0-9-]{36}$/;
 const ACTIVE=new Set(['starting','running','stopping','unknown']);
@@ -13,8 +14,9 @@ const busyPid=pid=>{if(!Number.isInteger(pid)||pid<1)return true;try{process.kil
 // Durable wrapper identities stay separate from the worker's own identities.
 // A proxy disappearing is never evidence that its background task stopped.
 export class WorkerTasks {
-  constructor({root,worker=new WorkerMcpClient(),enabled=async()=>false}) {
+  constructor({root,worker=new WorkerMcpClient(),enabled=async()=>false,networkSnapshot=localNetworkSnapshot}) {
     this.root=join(resolve(root),'worker-tasks');this.worker=worker;this.enabled=enabled;
+    this.networkSnapshot=networkSnapshot;
     this.entries=new Map();this.writes=new Map();this.gate=Promise.resolve();this.closed=false;
   }
   async init(){await mkdir(this.root,{recursive:true});return this;}
@@ -51,6 +53,7 @@ export class WorkerTasks {
       issue_id:record.issue_id,status:record.status,workerStatus:record.workerStatus??null,turn:record.turn,
       model:record.model??null,maxTokens:record.maxTokens??null,budgetControl:record.maxTokens?'per-request':'worker-policy',
       submission:record.submission,error:record.error??null,warnings:record.warnings??[],review:record.review??null,
+      ...(record.failure?{failure:record.failure}:{}),
       progress:record.progress??{},...(record.source_agent_id?{source_agent_id:record.source_agent_id}:{}),
       ...(record.resultPath?{final,resultPath:record.resultPath,resultTruncated:final.length<(record.final??'').length}:{}),
       ...(record.finishReason?{finishReason:record.finishReason}:{}),nativeViewAvailable:false};
@@ -95,22 +98,24 @@ export class WorkerTasks {
         await this.collect(entry);
       }catch(error){
         record.error=safe(error);
+        record.failure=classifyFailure(error,{stage:'worker_transport',networkSnapshot:this.networkSnapshot});
         // Only explicit preflight errors prove that no mutation was sent.
         const notSent=!record.workerAgentId&&error.mayHaveRun===false;
         record.status=notSent?'failed':'unknown';
         record.submission=notSent?'not_sent':record.submission==='acknowledged'?'acknowledged':'uncertain';
         await this.save(record);
       }
-    })().catch(error=>{entry.record.status='unknown';entry.record.error=safe(error);}).finally(()=>{entry.busy=false;});
+    })().catch(error=>{entry.record.status='unknown';entry.record.error=safe(error);entry.record.failure=classifyFailure(error,{stage:'worker_transport',networkSnapshot:this.networkSnapshot});}).finally(()=>{entry.busy=false;});
   }
   async apply(record,value){
     record.workerStatus=value.status;record.review=value.review??record.review;
     record.progress={lastEvent:value.last_event??value.progress??null,updatedAt:value.updated_at??new Date().toISOString()};
     record.updatedAt=new Date().toISOString();
-    if(value.wait_outcome!=='settled'){record.status='running';return;}
+    if(value.wait_outcome!=='settled'){record.status='running';record.failure=null;return;}
     record.error=value.error?safe(value.error):null;
     record.finishReason=value.finish_reason?.kind??value.finish_reason??value.status;
     record.status=value.status==='completed'?'completed':['interrupted','closed'].includes(value.status)?'interrupted':'failed';
+    record.failure=record.status==='completed'?null:classifyFailure(value.error,{stage:'provider',finishReason:record.finishReason,stopSource:record.status==='interrupted'?record.stopRequestedSource:null,networkSnapshot:this.networkSnapshot});
     if(record.status==='completed'){
       if(typeof value.answer!=='string'||!value.answer.trim()){record.status='failed';record.error='Worker settled without a final answer';}
       else{
@@ -142,7 +147,7 @@ export class WorkerTasks {
     await this.apply(record,value);await this.save(record);
     if(value.wait_outcome!=='settled'){
       entry.busy=true;
-      entry.done=this.collect(entry).catch(async error=>{record.status='unknown';record.error=safe(error);await this.save(record);}).finally(()=>{entry.busy=false;});
+      entry.done=this.collect(entry).catch(async error=>{record.status='unknown';record.error=safe(error);record.failure=classifyFailure(error,{stage:'worker_transport',networkSnapshot:this.networkSnapshot});await this.save(record);}).finally(()=>{entry.busy=false;});
     }
   }
   async status(id){
@@ -150,7 +155,7 @@ export class WorkerTasks {
     if(current?.busy||!ACTIVE.has(record.status))return this.summary(record);
     return this.serial(async()=>{
       const entry=await this.own(record);
-      if(!entry.busy)try{await this.reconcile(entry);}catch(e){record.status='unknown';record.error=safe(e);await this.save(record);}
+      if(!entry.busy)try{await this.reconcile(entry);}catch(e){record.status='unknown';record.error=safe(e);record.failure=classifyFailure(e,{stage:'worker_transport',networkSnapshot:this.networkSnapshot});await this.save(record);}
       return this.summary(record);
     });
   }
@@ -169,6 +174,7 @@ export class WorkerTasks {
     // The retained worker, not this adapter, owns review and correction caps.
     if(record.review?.phase!=='revision_ready'||record.review?.last_verdict!=='revise'||record.review.takeover_required)throw Error('Review this worker delivery as revise before followup; exhausted corrections require parent takeover');
     record.expectedRevision=(record.review.revision_round??0)+1;record.turn++;record.status='starting';record.final='';record.resultPath=null;record.error=null;
+    record.failure=null;record.stopRequestedSource=null;
     await this.save(record);this.run(entry,()=>this.worker.followup(record.workerAgentId,task));return this.summary(record);
   });}
   async review(id,verdict,feedback){return this.serial(async()=>{
@@ -176,18 +182,19 @@ export class WorkerTasks {
     if(entry.busy||ACTIVE.has(record.status)||!record.workerAgentId)throw Error('Worker is not settled for review');
     record.review=await this.worker.review(record.workerAgentId,verdict,feedback);await this.save(record);return{agent_id:id,backend:'worker',review:record.review};
   });}
-  async stop(id){
+  async stop(id,{source='caller'}={}){
     // Reconcile a lost start receipt before interrupting exactly that worker.
     await this.status(id);
     return this.serial(async()=>{
       const record=await this.read(id),entry=await this.own(record);
       if(!record.workerAgentId)throw Error('Cannot confirm which worker accepted the task; inspect its stable marker before stopping');
+      record.stopRequestedSource=source;await this.save(record);
       try{
         await this.worker.stop(record.workerAgentId);
         await entry.done;
         const value=await this.worker.wait(record.workerAgentId,0);
         await this.apply(record,value);await this.save(record);
-      }catch(e){record.status='unknown';record.error=safe(e);await this.save(record);throw e;}
+      }catch(e){record.status='unknown';record.error=safe(e);record.failure=classifyFailure(e,{stage:'worker_transport',networkSnapshot:this.networkSnapshot});await this.save(record);throw e;}
       return this.summary(record);
     });
   }
@@ -195,7 +202,7 @@ export class WorkerTasks {
   async list(){const names=(await readdir(this.root)).filter(name=>name.endsWith('.json')&&ID.test(name.slice(0,-5)));return Promise.all(names.map(async name=>this.summary(await this.read(name.slice(0,-5)))));}
   async close(){
     const unresolved=[];
-    for(const[id,entry]of this.entries)if(entry.busy||ACTIVE.has(entry.record.status))try{await this.stop(id);}catch(e){unresolved.push({agent_id:id,error:safe(e)});}
+    for(const[id,entry]of this.entries)if(entry.busy||ACTIVE.has(entry.record.status))try{await this.stop(id,{source:'controller_shutdown'});}catch(e){unresolved.push({agent_id:id,error:safe(e)});}
     this.closed=true;await this.worker.close();
     await Promise.all([...this.entries.values()].map(async entry=>{await entry.done;await this.writes.get(entry.record.agent_id)?.catch(()=>{});await entry.release();}));
     this.entries.clear();return{unresolved};

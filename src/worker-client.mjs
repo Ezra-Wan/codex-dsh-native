@@ -6,7 +6,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport, getDefaultEnvironment } from '@modelcontextprotocol/sdk/client/stdio.js';
 
 export class WorkerRequestError extends Error {
-  constructor(message, mayHaveRun = false) { super(message); this.mayHaveRun = mayHaveRun; }
+  constructor(message, mayHaveRun = false, cause) { super(message, cause?{cause}:undefined); this.mayHaveRun = mayHaveRun; }
 }
 const clean = error => String(error?.message ?? error).replace(/Bearer\s+\S+/gi, 'Bearer [redacted]').replace(/([?&](?:token|api_key|key)=)[^&\s]+/gi, '$1[redacted]').slice(0,2000);
 const required = ['dsh_start','dsh_status','dsh_wait','dsh_events','dsh_followup','dsh_interrupt','dsh_review','dsh_list'];
@@ -56,7 +56,7 @@ export class WorkerMcpClient {
         if (this.closed) throw new Error('Worker adapter was closed during connection');
         this.connection = connection;
         return connection;
-      } catch(error) { await client.close().catch(()=>{}); throw new WorkerRequestError(clean(error)); }
+      } catch(error) { await client.close().catch(()=>{}); throw new WorkerRequestError(clean(error),false,error); }
     })().finally(()=>{this.connecting=null;});
     return this.connecting;
   }
@@ -83,7 +83,7 @@ export class WorkerMcpClient {
     } catch(error) {
       // Once a mutation was sent, even a remote error may follow acceptance.
       // The caller must reconcile the stable submission marker, never replay.
-      throw new WorkerRequestError(clean(error),mutating);
+      throw new WorkerRequestError(clean(error),mutating,error);
     }
   }
   async start(args) { return this.call('dsh_start',await this.startArguments(args),{mutating:true}); }
