@@ -13,12 +13,16 @@ export function scopeWhaleWindows(source){
         return candidates.Where(pid => pid == requested && !candidates.Contains(parents[pid])).ToArray();`);
 }
 export async function adaptWhalePresentation(code){
-  const replace=async(file,from,to)=>{const text=await readFile(file,'utf8');if(text.split(from).length!==2)throw Error(`Unsupported upstream presentation contract: ${file}`);await writeFile(file,text.replace(from,to),{flush:true});};
-  await cp(new URL('../ui/whale-balance-strip.js',import.meta.url),join(code,'desktop/ui/codex-dsh-balance.js'));
-  await replace(join(code,'desktop/ui/widget.html'),'<script src="/shape.js" defer></script>','<script src="/codex-dsh-balance.js" defer></script><script src="/shape.js" defer></script>');
-  await replace(join(code,'runtime/dispatcher.mjs'),"const uiFiles = {","const uiFiles = { '/codex-dsh-balance.js': 'codex-dsh-balance.js',");
-  await replace(join(code,'desktop/ui/shape.js'),"dialog[open],.whale-account-card,",".codex-dsh-balance,dialog[open],.whale-account-card,");
-  await replace(join(code,'desktop/ui/shape.js'),".dshwv-img,.dshwv-root,",".codex-dsh-balance,.dshwv-img,.dshwv-root,");
+  const file=join(code,'assets/whale-widget.js');let text=(await readFile(file,'utf8')).replaceAll('\r\n','\n');
+  const replace=(from,to)=>{if(text.split(from).length!==2)throw Error('Unsupported upstream native bubble contract');text=text.replace(from,to);};
+  // Reuse the original single-buffered scene controller and renderer. A second
+  // custom label would overlap the native bubble (observed in the host).
+  const show="if (bubbleOn && window.WhaleAccountView?.mode !== 'subscription') sceneOpen('normal', bubbleRenderDefault, 0);";
+  replace('loadBubbleCfg().catch(assetFailure);',`loadBubbleCfg().catch(assetFailure).finally(function () { ${show} });`);
+  replace("sceneOpen('normal', bubbleRenderDefault, BUBBLE_MS);","sceneOpen('normal', bubbleRenderDefault, 0);");
+  replace('busy = false;\n        if (timer) clearTimeout(timer);',`busy = false;\n        if (timer) clearTimeout(timer);\n        if (!bubbleScene || bubbleScene.kind === 'normal') { ${show} }`);
+  replace('bubbleCloseVisual();\n    }\n    function showCostBubble',`bubbleCloseVisual();\n      setTimeout(function () { if (!bubbleShown) { ${show} } }, 350);\n    }\n    function showCostBubble`);
+  await writeFile(file,text,{flush:true});
 }
 export async function prepareWhale({source,home,codexHome,install=false}){
   source=resolve(source);home=resolve(home);codexHome=resolve(codexHome);
