@@ -3,7 +3,7 @@ import { isAbsolute, join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { createRuntime, writeSubagentPatch, writeWebEmbedPatch } from './runtime.mjs';
+import { createRuntime, writeExecutionPatch, writeSubagentPatch, writeWebEmbedPatch } from './runtime.mjs';
 import { visibleEvent, readNativeEvents } from './trace.mjs';
 
 export const MODES = Object.freeze({
@@ -272,7 +272,7 @@ export class Bridge {
         // Subagent tasks add the official delegation patch below global ones;
         // web-embed tasks add the per-task webserver port + URL-file adapter
         // on the sdk-web profile (official UI in THIS process → native stream).
-        let patches = this.patches;
+        let patches = [...this.patches,await writeExecutionPatch(this.root,{webEmbed:!!record.webEmbed,subagents:!!record.subagents})];
         if (record.subagents) patches = [...patches, await writeSubagentPatch(this.root)];
         if (record.webEmbed) {
           const urlFile = join(this.root, 'task-urls', `${record.webPort}.json`);

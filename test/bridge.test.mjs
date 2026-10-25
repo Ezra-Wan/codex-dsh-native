@@ -228,8 +228,8 @@ test('subagent tasks mount the official delegation patch and record role', async
   await bridge.setEnabled(true);
   const task = await bridge.start({ cwd: root, task: 'delegate docs', subagents: true, role: 'sub', name: '[X·sub] docs', webEmbed: false });
   const runtime = await ready(fake);
-  assert.equal(runtime.patches.length, 1);
-  const patch = await readFile(runtime.patches[0], 'utf8');
+  assert.equal(runtime.patches.length, 2);
+  const patch = await readFile(runtime.patches[1], 'utf8');
   assert.match(patch, /dsh-subagent-spawn-in-process/);
   assert.match(patch, /provider: spawn/);
   runtime.finish();
@@ -238,12 +238,13 @@ test('subagent tasks mount the official delegation patch and record role', async
   assert.equal(summary.subagents, true);
 });
 
-test('plain tasks stay on the unpatched profile', async t => {
+test('plain SDK tasks keep native execution and explicitly disable optional delegation', async t => {
   const { root, bridge, fake } = await setup(t);
   await bridge.setEnabled(true);
   await bridge.start({ cwd: root, task: 'plain', permission: 'read-only', webEmbed: false });
   const runtime = await ready(fake);
-  assert.deepEqual(runtime.patches, []);
+  assert.equal(runtime.patches.length,1);
+  const patch=await readFile(runtime.patches[0],'utf8');assert.match(patch,/tool-subagent\n  disabled: true/);assert.doesNotMatch(patch,/id: tool-fs\n/);
   runtime.finish();
 });
 
