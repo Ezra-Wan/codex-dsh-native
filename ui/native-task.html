@@ -4,11 +4,13 @@ html,body{margin:0;height:600px;overflow:hidden}body{display:flex;flex-direction
 #native-toolbar{height:34px;flex:none;display:flex;align-items:center;gap:8px;padding:0 8px;font:12px system-ui;background:var(--dsw-alias-bg-base,#fff);color:var(--dsw-alias-label-primary,#222)}
 #state{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #native-stage{flex:1;min-height:0;position:relative}#root{height:100%;min-height:0}
+#worker-fallback{position:absolute;inset:0;padding:14px;overflow:auto;color-scheme:light dark;background:var(--dsw-alias-bg-base,light-dark(#fafafa,#141414));color:var(--dsw-alias-label-primary,light-dark(#222,#ddd));font:13px system-ui}#worker-fallback[hidden]{display:none}#worker-fallback pre{white-space:pre-wrap;overflow-wrap:anywhere;font:12px ui-monospace,monospace}#worker-fallback h2{font-size:14px;margin-top:0}
 #native-loading{position:absolute;inset:0;display:grid;place-content:center;justify-items:center;gap:16px;font:13px system-ui;color:var(--dsw-alias-label-secondary,light-dark(#555,#bbb));background:var(--dsw-alias-bg-base,light-dark(#fafafa,#141414));color-scheme:light dark}
 #native-loading[hidden]{display:none}#native-loading p{margin:0;max-width:40ch;text-align:center;overflow-wrap:anywhere}
 .native-dots{display:flex;gap:7px;height:12px;align-items:center}.native-dots i{width:7px;height:7px;border-radius:50%;background:currentColor;animation:native-dot 1.2s ease-in-out infinite}.native-dots i:nth-child(2){animation-delay:.15s}.native-dots i:nth-child(3){animation-delay:.3s}
 #native-loading[data-busy="false"] .native-dots{display:none}
 @keyframes native-dot{0%,70%,100%{opacity:.3;transform:translateY(0)}35%{opacity:1;transform:translateY(-5px)}}
 @media(prefers-reduced-motion:reduce){.native-dots i{animation:none;opacity:.65}}
-</style></head><body><div id="native-toolbar"><select id="tasks" aria-label="DSH 任务"></select><span id="state">等待任务信息…</span><button id="retry" type="button">重新连接</button></div><div id="native-stage"><div id="root"></div><div id="native-loading" role="status" aria-live="polite" data-busy="true"><span class="native-dots" aria-hidden="true"><i></i><i></i><i></i></span><p id="native-loading-message">正在准备 DSH…</p></div></div>
-<script type="module">__NATIVE_APP__</script></body></html>
+</style></head><body><div id="native-toolbar"><select id="tasks" aria-label="DSH 任务"></select><span id="state">等待任务信息…</span><button id="retry" type="button">重新连接</button></div><div id="native-stage"><div id="root"></div><div id="native-loading" role="status" aria-live="polite" data-busy="true"><span class="native-dots" aria-hidden="true"><i></i><i></i><i></i></span><p id="native-loading-message">正在准备 DSH…</p></div>
+<section id="worker-fallback" hidden aria-label="旧 worker 兜底"><h2>旧 worker 兜底</h2><p>此处显示状态、最终结果和工具记录；不提供原生 DSH 正文流。</p><pre id="worker-state"></pre><h3>最终结果</h3><pre id="worker-answer"></pre><h3>近期工具记录</h3><pre id="worker-events"></pre></section>
+</div><script type="module">__NATIVE_APP__</script></body></html>

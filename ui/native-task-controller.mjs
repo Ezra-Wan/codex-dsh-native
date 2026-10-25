@@ -1,14 +1,26 @@
 // Serialize client-tree changes. Host display-mode changes never call select(),
 // so the same native tree and its connection survive a layout-only change.
-export function createNativeTaskController({ call, mount, waiting = () => {}, failed = () => {} }) {
+export function createNativeTaskController({ call, mount, worker, waiting = () => {}, failed = () => {} }) {
   let sequence = 0, current, pendingTarget, failedTarget, chain = Promise.resolve(), stopped = false;
   const close = async view => {
     if (!view) return;
     try { await view.instance?.dispose(); }
-    finally { await call('native_view_close', { viewId: view.viewId }).catch(() => {}); }
+    finally { if(view.viewId)await call('native_view_close', { viewId: view.viewId }).catch(() => {}); }
   };
   const select = (task, { force = false } = {}) => {
     if (stopped || !task?.agent_id) return Promise.resolve();
+    if(task.backend==='worker'){
+      if(!force&&current?.agentId===task.agent_id&&current.backend==='worker'){current.instance?.update(task);return Promise.resolve();}
+      const version=++sequence;pendingTarget=null;failedTarget=null;waiting(task);
+      chain=chain.catch(()=>{}).then(async()=>{
+        const previous=current;current=null;await close(previous);
+        if(stopped||version!==sequence)return;
+        if(!worker)throw Error('Worker fallback view unavailable');
+        const view={agentId:task.agent_id,backend:'worker',instance:await worker(task)};
+        if(stopped||version!==sequence){await close(view);return;}current=view;
+      }).catch(error=>{if(!stopped&&version===sequence)failed(error);});
+      return chain;
+    }
     if (!force && pendingTarget?.agentId === task.agent_id && (pendingTarget.generation === undefined || task.runtimeGeneration === undefined || task.runtimeGeneration === pendingTarget.generation)) return chain;
     if (!force && failedTarget?.agentId === task.agent_id && (task.runtimeGeneration === undefined || task.runtimeGeneration === failedTarget.generation)) return Promise.resolve();
     if (task.nativeViewAvailable === false && !['starting', 'running'].includes(task.status)) {

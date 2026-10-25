@@ -5,14 +5,18 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 import { Bridge } from './bridge.mjs';
-import { registerNativeTaskUi, bridgeTaskResolver, NATIVE_TASK_URI } from './native-task-ui.mjs';
+import { WorkerTasks } from './worker-tasks.mjs';
+import { TaskRouter } from './task-router.mjs';
+import { registerNativeTaskUi, NATIVE_TASK_URI } from './native-task-ui.mjs';
 
 const root = process.env.CODEX_DSH_BRIDGE_HOME ?? fileURLToPath(new URL('../.local/', import.meta.url));
 const webEmbedBasePort = Number(process.env.CODEX_DSH_WEB_BASE_PORT ?? 8800);
 if (!Number.isInteger(webEmbedBasePort) || webEmbedBasePort < 1024 || webEmbedBasePort > 65533) {
   throw new Error('CODEX_DSH_WEB_BASE_PORT must be an integer between 1024 and 65533.');
 }
-const bridge = await new Bridge({ root, webEmbedBasePort }).init();
+const nativeBridge = await new Bridge({ root, webEmbedBasePort }).init();
+const worker = await new WorkerTasks({ root, enabled: async () => (await nativeBridge.config()).enabled }).init();
+const bridge = new TaskRouter(nativeBridge,worker);
 const nativeMcpUi = process.env.CODEX_DSH_UI === 'mcp';
 const uiDiagnostics = process.env.CODEX_DSH_UI_DIAGNOSTICS === 'on';
 const arg = process.argv[2];
@@ -42,8 +46,9 @@ if (arg) {
       await mkdir(dir, { recursive: true });
       await appendFile(join(dir, 'native-ui-evidence.jsonl'), JSON.stringify({ ...args, at: new Date().toISOString() }) + '\n');
     },
-    resolveTask: bridgeTaskResolver(bridge),
-    retainView: id => bridge.retainView(id),
+    resolveTask: (id,wait) => bridge.resolveTask(id,wait),
+    retainView: id => nativeBridge.retainView(id),
+    workerEvents: (id,after,limit) => worker.events(id,after,limit),
     listTasks: async () => (await bridge.list()).items,
   }) : null;
   if (!nativeMcpUi) server.registerResource('dsh-observer', resourceUri, { title: 'DSH 执行记录', mimeType: 'text/html;profile=mcp-app' }, async () => ({
@@ -60,7 +65,7 @@ if (arg) {
     if (enabled !== undefined) await bridge.setEnabled(enabled);
     return bridge.list();
   });
-  add('ds_start', 'Start an independent native DeepSeek Harness task asynchronously. Both modes retain native tools, workspace, history and automatic compaction. Caller chooses an explicit maxTokens for a bounded task when appropriate; light defaults to 8192 output tokens/request, coding to 32768. These are not context-window or total-spend limits. Return immediately, continue independent parent work, then collect with ds_wait. Do not use outside the user-authorized scope. Caller must prepare the existing cwd and separate worktrees for concurrent writers: the bridge never creates or merges a worktree. role: peer or sub is an organizational label, not proof of a copied workspace or native parent/child lineage. subagents:true separately mounts the official DSH delegation tool; actual native children appear in children and are observable through ds_events, never directly driven through ds_followup. User takeover authorization is not implemented; the task UI hides ordinary message input. backend:native runs here; backend:worker returns a manual failover directive for the retained deepseek_worker MCP, not an integrated adapter. Never rerun a status-unknown native task without checking its status.', {
+  add('ds_start', 'Start a persistent DSH task asynchronously. backend:native uses the original native harness and body stream; backend:worker uses the retained configured deepseek_worker through MCP, with durable wrapper and worker_agent_id identities. Worker requires stable issue_id and ds_review(pass/revise) before revision; it cannot promise native UI streaming or subagents. An explicit unsupported maxTokens is rejected before dispatch, never silently dropped. Native light defaults to 8192 output tokens/request, coding to 32768; caps are not context or total-cost limits. Continue independent parent work and collect with ds_wait. Caller prepares cwd/separate worktrees; role peer/sub is an organizational label. subagents:true mounts official native delegation. User takeover is not implemented; native message input is hidden. Never duplicate an unknown or possibly running task on the other backend; inspect and stop/reconcile first.', {
     task: z.string().min(1).describe('Self-contained bounded task, artifacts to produce, verification and concise final delivery.'),
     cwd: z.string().min(1).describe('Absolute task workspace; separate worktree for concurrent code writers.'),
     name: z.string().max(100).optional(),
@@ -68,6 +73,7 @@ if (arg) {
     role: z.enum(['sub', 'peer']).default('peer'),
     subagents: z.boolean().default(false),
     backend: z.enum(['native', 'worker']).default('native'),
+    issue_id: z.string().min(1).max(200).optional().describe('Required for worker: stable issue identity across corrections; never change it to evade the worker correction budget.'),
     webEmbed: z.boolean().default(true),
     permission: z.enum(['read-only', 'workspace-write']).default('workspace-write'),
     model: z.string().optional(),
@@ -81,10 +87,13 @@ if (arg) {
     title: 'DS 任务',
     _meta: { ui: { resourceUri } },
   });
-  add('ds_followup', 'Continue an idle native DSH session with its persisted context. The same workspace, model, permission and output cap are retained. Missing native history fails; it is never silently replaced with a fresh session.', {
+  add('ds_followup', 'Continue an idle task with the same backend, workspace and retained conversation. Native output cap is retained. Worker requires ds_review revise, obeys its correction cap, and retains worker_agent_id. Unknown acceptance cannot be replayed.', {
     agent_id: agent,
     task: z.string().min(1),
   }, ({ agent_id, task }) => bridge.followup(agent_id, task));
+  add('ds_review','Review a settled worker delivery as pass or revise after inspecting actual artifacts. The retained worker owns correction limits; do not bypass takeover_required with a new issue_id. Not a native-session review ledger.',{
+    agent_id:agent,verdict:z.enum(['pass','revise']),feedback:z.string().min(1).max(12000),
+  },({agent_id,verdict,feedback})=>bridge.review(agent_id,verdict,feedback));
   add('ds_wait', 'Collect compact progress, actual recent actions, warnings or a bounded final answer. Returns as soon as a fresh native event arrives (event-driven bounded wait), at the timeout, or at completion. Running remains pending. completed_with_warnings means native tool failures occurred and must be inspected using ds_events. Full final text is in resultPath. failed/interrupted is not success.', {
     agent_id: agent,
     timeoutMs: z.number().int().min(0).max(50000).default(50000),
@@ -94,7 +103,7 @@ if (arg) {
   }, ({ agent_id }) => bridge.stop(agent_id));
   add('ds_events', 'Read actual DSH tool calls, results, visible messages and turn boundaries from native session storage. Read-only, no model calls. Continue from cursor with after_seq. Also accepts a native child session id (subagent) listed in a task summary — children are observation-only. Omits reasoning and provider request headers. Does not itself prove that the host renders a live UI.', {
     agent_id: agent,
-    after_seq: z.number().int().min(-1).default(-1),
+    after_seq: z.union([z.number().int().min(-1),z.string().max(2000)]).default(-1).describe('Native numeric sequence or worker opaque next_cursor; return the cursor unchanged.'),
     limit: z.number().int().min(1).max(50).default(30),
   }, ({ agent_id, after_seq, limit }) => bridge.events(agent_id, after_seq, limit), {
     annotations: { readOnlyHint: true }, _meta: { ui: { visibility: ['model', 'app'] } },
@@ -125,5 +134,5 @@ if (arg) {
   await server.connect(new StdioServerTransport());
   // Retired loopback replay never starts implicitly. Task-owned runtimes and
   // the MCP native UI are independent of this optional legacy service.
-  if (!nativeMcpUi && process.env.DSH_NATIVE_REPLAY === 'on') bridge.ensureNativeReplay().catch(() => {});
+  if (!nativeMcpUi && process.env.DSH_NATIVE_REPLAY === 'on') nativeBridge.ensureNativeReplay().catch(() => {});
 }

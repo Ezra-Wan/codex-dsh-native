@@ -153,3 +153,18 @@ test('a revoked runtime withdraws the native view until a new generation becomes
   assert.equal(calls.filter(call=>call.name==='native_bootstrap').length,2);
   await controller.dispose();
 });
+
+test('worker view is explicit, updates without native bootstrap, and releases only its own view during A/B switch',async()=>{
+  const calls=[],updated=[],disposed=[];
+  const controller=createNativeTaskController({call:async(name,args)=>{calls.push(name);return{viewId:'native-A',task:{runtimeGeneration:1}};},
+    mount:async()=>({dispose:()=>disposed.push('native')}),
+    worker:async task=>({update:state=>updated.push(state.status),dispose:()=>disposed.push(task.agent_id)}),
+  });
+  await controller.select({agent_id:'native',backend:'native'});
+  await controller.select({agent_id:'worker',backend:'worker',nativeViewAvailable:false,status:'running'});
+  assert.equal(controller.current().backend,'worker');
+  await controller.select({agent_id:'worker',backend:'worker',nativeViewAvailable:false,status:'completed'});
+  assert.deepEqual(updated,['completed']);assert.equal(calls.filter(name=>name==='native_bootstrap').length,1);
+  await controller.select({agent_id:'native',backend:'native'});await controller.dispose();
+  assert.deepEqual(disposed,['native','worker','native']);
+});
