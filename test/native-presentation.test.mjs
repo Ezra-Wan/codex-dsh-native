@@ -6,6 +6,7 @@ import { readFile } from 'node:fs/promises';
 import { runInNewContext } from 'node:vm';
 import { createRequire } from 'node:module';
 import { createNativeDisplayMode, registerNativePresentation } from '../ui/native-presentation.mjs';
+const locale={bind:ns=>key=>`${ns}.${key}`,subscribe:()=>()=>{}};
 
 test('native presentation hides free-text input in both modes and restores only drawer controls in fullscreen', () => {
   const core = new SlotCore();
@@ -29,7 +30,7 @@ test('native presentation hides free-text input in both modes and restores only 
   const mode=createNativeDisplayMode(), boot={entries:[],batches:[]};
   let factory;
   registerNativePresentation({loader:{load:entry=>{factory=entry.factory;}},boot,mode,doc});
-  const dispose=factory().apply({slots:{
+  const dispose=factory().apply({locale,slots:{
     inject:(_key,fn)=>fn(), register:core.register.bind(core),
   }});
   assert.equal(doc.documentElement.dataset.codexNativeMode,'inline');
@@ -58,6 +59,7 @@ test('the installed renderer SlotRegistry owns mode-switch registrations and unl
   runInNewContext(source,{window:{__ModuleLoader__:{load:entry=>{factory=entry.factory;}}},queueMicrotask,console});
   const {SlotRegistry}=factory(createRequire(import.meta.url));
   const ctx=new Context(), mode=createNativeDisplayMode();
+  ctx.provide('locale',locale);
   const doc={documentElement:{dataset:{}},head:{appendChild(){}},createElement:()=>({remove(){}})};
   let plugin;
   registerNativePresentation({loader:{load:entry=>{plugin=entry.factory();}},boot:{entries:[]},mode,doc});

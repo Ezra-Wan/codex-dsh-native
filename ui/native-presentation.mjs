@@ -3,6 +3,7 @@
 // DSH 0.2.1-rc.2 has no public "remove columns" action. Its stable frame data
 // attributes identify the original three-column frame; no hashed class names
 // or copied conversation DOM are involved.
+import { nativeCreationPolicyCss } from './native-creation-policy.mjs';
 export const INLINE_NATIVE_CSS = `
 html[data-codex-native-mode="inline"] #root :has(> [data-rightbar-col]) {
   grid-template-columns: 0px minmax(0px, 1fr) 0px !important;
@@ -40,11 +41,13 @@ export function createNativeDisplayMode() {
 export function registerNativePresentation({ loader, boot, mode, doc = document }) {
   const id = 'integration:codex-native-presentation';
   loader.load({ id, factory: () => ({
-    inject: ['slots'],
+    inject: ['slots', 'locale'],
     apply(ctx) {
       const style = doc.createElement('style');
-      style.textContent = INLINE_NATIVE_CSS;
+      const updateStyle = () => { style.textContent = INLINE_NATIVE_CSS + nativeCreationPolicyCss(ctx.locale); };
+      updateStyle();
       doc.head.appendChild(style);
+      const offLocale = ctx.locale.subscribe(updateStyle);
       // Bridge-owned task views do not offer a second free-text prompter.
       // Hide only the resident composer BAR through its native slot. Keep
       // the separate composer chain intact (native questions/approvals and
@@ -65,11 +68,11 @@ export function registerNativePresentation({ loader, boot, mode, doc = document 
       };
       const off = mode.subscribe(sync);
       sync();
-      return () => { off(); unshadow?.(); disposeComposerPolicy(); style.remove(); delete doc.documentElement.dataset.codexNativeMode; };
+      return () => { off(); offLocale(); unshadow?.(); disposeComposerPolicy(); style.remove(); delete doc.documentElement.dataset.codexNativeMode; };
     },
   }) });
   boot.entries.push({ id, url: '/codex-native-presentation.js', rev: '1', immediately: true,
-    inject: ['@deepseek-ai/dsh-client-ui-layout', '@deepseek-ai/dsh-client-ui-sidebar-right'] });
+    inject: ['@deepseek-ai/dsh-client-ui-layout', '@deepseek-ai/dsh-client-ui-sidebar-right', '@deepseek-ai/dsh-client-locale'] });
   boot.batches ??= [];
   boot.batches.push({ phase: 'application', url: '/codex-native-presentation.js', rev: '1', entries: [id] });
 }

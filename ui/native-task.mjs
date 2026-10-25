@@ -98,7 +98,7 @@ window.addEventListener('unhandledrejection', event => { void signal('rejection'
 app.onteardown = async () => { clearInterval(timer); await controller.dispose(); return {}; };
 await app.connect();
 await layout.context(app.getHostContext());
-void signal('native-card-connected', `task-v8; ${crypto.randomUUID()}; autoResize=false`);
+void signal('native-card-connected', `task-v9; ${crypto.randomUUID()}; autoResize=false`);
 await installNativeFonts(globalThis.__DSH_NATIVE_FONTS__ ?? []);
 delete globalThis.__DSH_NATIVE_FONTS__;
 timer = setInterval(async () => {
