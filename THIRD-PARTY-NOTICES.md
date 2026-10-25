@@ -11,6 +11,8 @@
 
 Installed dependencies retain their own licenses and notices. This file records source copied into this repository and does not replace their notices.
 
+The same DeepSeek upstream revision also supplies the MIT contract-test sources under `test/vendor/session-controller/` (each file retains its source header) and the native theme tokens extracted into `ui/theme.css`. The upstream MIT text above applies to those reused sources; our root LICENSE does not replace DeepSeek's copyright. Bundled UI produced locally from npm dependencies retains those dependencies' respective licenses. This preview distributes source, not a prebuilt third-party UI or native binary bundle.
+
 ## DSH-for-Vscode session navigation
 
 - Upstream: https://github.com/k2124732496-lab/DSH-for-Vscode

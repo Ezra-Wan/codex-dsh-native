@@ -2,9 +2,13 @@
 
 独立项目，初始实现日期：2026-10-22。
 
+**开发者预览 v0.1.2-preview.1**：[安装、适用环境与已知限制](docs/preview-v0.1.2.md)。自有代码采用 [MIT](LICENSE)，第三方原版权和许可保持不变；这不是 OpenAI 或 DSH 的官方发行版。
+
+本项目以 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 原版 SDK/Web 为基础，复用其 WorkerTunnel 与事件契约、[DSH-for-Vscode](https://github.com/k2124732496-lab/DSH-for-Vscode) 的会话导航来源代码，并可选接入原版 OPS 和 [Codex Whale](https://github.com/Yang-huai406/Codex-Whale-Public)。我们主要增加 MCP 传输、任务生命周期与宿主适配，具体来源与改动见 [第三方声明](THIRD-PARTY-NOTICES.md)。
+
 Codex 保留自己的登录、工作区与运行环境；DeepSeek 在官方 DSH 的完整 SDK profile 中工作。桥接负责发任务、保留会话身份、展示原生执行事件、等待结果和中断，不自己实现模型循环、工具体系或上下文压缩。
 
-**当前状态（2026-10-25）：原版正文流、历史与 worker 基础兜底已有目视确认；115/115 离线通过。新增连接故障分类及失联任务防重派发，详见[诊断说明](docs/connection-diagnostics-20261025.md)。新增 OPS 文件工具及冷续接、同父双子并发实测、动态根并发1–8、第二实例常驻原版小鲸鱼。OPS 并发 Shell 一成功一失败，费用估算、审批/压缩完整交互、接管与主实例迁移仍未完成。** 详见 [本轮 OPS/并发/余额报告](docs/ops-balance-concurrency-20261025.md)。
+**当前状态（2026-10-26）：原版正文流、历史与 worker 基础兜底已有目视确认；116/116 离线通过。新增连接故障分类及失联任务防重派发，详见[诊断说明](docs/connection-diagnostics-20261025.md)。新增 OPS 文件工具及冷续接、同父双子并发实测、动态根并发1–8、第二实例常驻原版小鲸鱼。OPS 并发 Shell 一成功一失败，费用估算、审批/压缩完整交互、接管与主实例迁移仍未完成。** 详见 [本轮 OPS/并发/余额报告](docs/ops-balance-concurrency-20261025.md)。
 
 **尚不能完全替代 work**：原生代码修改正确，但新版 Windows PowerShell 沙箱发生 Win32 5 初始化错误；同一条测试命令转交旧 worker 后真实执行成功（3 pass，已读取工具结果）。目前适合原生优先、明确失败后 worker 兜底；隔离目录的官方权限诊断修复等待用户确认。
 
