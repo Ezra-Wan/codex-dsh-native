@@ -2,7 +2,7 @@
 
 ## 当前 TODO：替代旧 worker，失败保留 worker 兜底（2026-10-26）
 
-**预览版准备（2026-10-26）**：v0.1.2-preview.1 自有代码采用MIT、上游声明保留；新增空环境 profile 准备检查，完整回归现116项。Git全历史文本与完整解压夹具已做脱敏秘密扫描。仓库可见性和Release结果须以发布后GitHub事实核对，不能因文件写好便声称已公开。
+**公开预览已发布（2026-10-26）**：[仓库](https://github.com/Ezra-Wan/codex-dsh-native) 已是 public；[v0.1.2-preview.1](https://github.com/Ezra-Wan/codex-dsh-native/releases/tag/v0.1.2-preview.1) 是源码 prerelease、指向207971e，自有MIT且保留上游许可。全新安装及本地116/116通过，[GitHub Windows/Node24 CI](https://github.com/Ezra-Wan/codex-dsh-native/actions/runs/40210942102)成功。Git全历史及完整夹具扫描未发现凭据；已无凭据下载公开源码包核对SHA256一致。实际宿主/断网验收仍独立，主实例未重载。
 
 **本节优先于后文历史。** 本轮 OPS、动态并发与常驻小鲸鱼已做实际调用/界面验证，完整事实见 [本轮报告](docs/ops-balance-concurrency-20261025.md)。不是“全部功能等价”：OPS 并发 Bash 一成功一失败，费用估算和主实例迁移仍未实现。
 

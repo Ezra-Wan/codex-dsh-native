@@ -2,7 +2,7 @@
 
 独立项目，初始实现日期：2026-10-22。
 
-**开发者预览 v0.1.2-preview.1**：[安装、适用环境与已知限制](docs/preview-v0.1.2.md)。自有代码采用 [MIT](LICENSE)，第三方原版权和许可保持不变；这不是 OpenAI 或 DSH 的官方发行版。
+**[开发者预览 v0.1.2-preview.1](https://github.com/Ezra-Wan/codex-dsh-native/releases/tag/v0.1.2-preview.1)** · [自动回归](https://github.com/Ezra-Wan/codex-dsh-native/actions/workflows/ci.yml)：[安装、适用环境与已知限制](docs/preview-v0.1.2.md)。自有代码采用 [MIT](LICENSE)，第三方原版权和许可保持不变；这不是 OpenAI 或 DSH 的官方发行版。
 
 本项目以 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 原版 SDK/Web 为基础，复用其 WorkerTunnel 与事件契约、[DSH-for-Vscode](https://github.com/k2124732496-lab/DSH-for-Vscode) 的会话导航来源代码，并可选接入原版 OPS 和 [Codex Whale](https://github.com/Yang-huai406/Codex-Whale-Public)。我们主要增加 MCP 传输、任务生命周期与宿主适配，具体来源与改动见 [第三方声明](THIRD-PARTY-NOTICES.md)。
 
