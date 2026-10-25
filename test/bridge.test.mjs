@@ -125,6 +125,19 @@ test('disabling dispatch preserves already running work', async t => {
   await assert.rejects(bridge.followup(first.agent_id, 'next'), /disabled/);
 });
 
+test('dynamic root concurrency persists across reconnects and lowering does not interrupt active tasks',async t=>{
+  const {root,bridge,fake}=await setup(t);await bridge.configure({enabled:true,maxParallel:1});
+  const first=await bridge.start({cwd:root,task:'A',permission:'read-only',webEmbed:false});await ready(fake);
+  await assert.rejects(bridge.start({cwd:root,task:'B',permission:'read-only',webEmbed:false}),/capacity/);
+  await bridge.configure({maxParallel:3});
+  const second=await bridge.start({cwd:root,task:'B',permission:'read-only',webEmbed:false});await ready(fake,1);
+  await bridge.configure({maxParallel:1});assert.equal(fake.instances[0].closed,false);assert.equal(fake.instances[1].closed,false);
+  assert.equal((await bridge.config()).enabled,true);await assert.rejects(bridge.configure({maxParallel:9}),/1 to 8/);
+  fake.instances[0].finish();fake.instances[1].finish();await bridge.wait(first.agent_id);await bridge.wait(second.agent_id);await bridge.close();
+  const restored=await new Bridge({root,runtimeFactory:fake.create}).init();t.after(()=>restored.close());
+  assert.equal(restored.maxParallel,1);await restored.setEnabled(false);assert.equal((await restored.config()).maxParallel,1);
+});
+
 test('cold followup resumes native history using exactly the same identity', async t => {
   const { root, bridge, fake } = await setup(t);
   await bridge.setEnabled(true);

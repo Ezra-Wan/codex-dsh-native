@@ -12,6 +12,7 @@ export class TaskRouter {
   async backend(id){return await this.worker.has(id)?this.worker:this.native;}
   async list(){const [native,worker]=await Promise.all([this.native.list(),this.worker.list()]);return{...native,items:[...native.items,...worker]};}
   setEnabled(value){return this.native.setEnabled(value);}
+  configure(value){return this.native.configure(value);}
   async guardWriter(args,exclude){
     if(args.permission==='read-only')return;
     const target=await canonical(args.cwd);
