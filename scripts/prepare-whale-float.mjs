@@ -12,18 +12,6 @@ export function scopeWhaleWindows(source){
         if (!int.TryParse(Environment.GetEnvironmentVariable("CODEX_DSH_WHALE_TARGET_PID"), out requested) || requested <= 0) return new int[0];
         return candidates.Where(pid => pid == requested && !candidates.Contains(parents[pid])).ToArray();`);
 }
-export async function adaptWhalePresentation(code){
-  const file=join(code,'assets/whale-widget.js');let text=(await readFile(file,'utf8')).replaceAll('\r\n','\n');
-  const replace=(from,to)=>{if(text.split(from).length!==2)throw Error('Unsupported upstream native bubble contract');text=text.replace(from,to);};
-  // Reuse the original single-buffered scene controller and renderer. A second
-  // custom label would overlap the native bubble (observed in the host).
-  const show="if (bubbleOn && window.WhaleAccountView?.mode !== 'subscription') sceneOpen('normal', bubbleRenderDefault, 0);";
-  replace('loadBubbleCfg().catch(assetFailure);',`loadBubbleCfg().catch(assetFailure).finally(function () { ${show} });`);
-  replace("sceneOpen('normal', bubbleRenderDefault, BUBBLE_MS);","sceneOpen('normal', bubbleRenderDefault, 0);");
-  replace('busy = false;\n        if (timer) clearTimeout(timer);',`busy = false;\n        if (timer) clearTimeout(timer);\n        if (!bubbleScene || bubbleScene.kind === 'normal') { ${show} }`);
-  replace('bubbleCloseVisual();\n    }\n    function showCostBubble',`bubbleCloseVisual();\n      setTimeout(function () { if (!bubbleShown) { ${show} } }, 350);\n    }\n    function showCostBubble`);
-  await writeFile(file,text,{flush:true});
-}
 export async function prepareWhale({source,home,codexHome,install=false}){
   source=resolve(source);home=resolve(home);codexHome=resolve(codexHome);
   const revision=spawnSync('git',['-C',source,'rev-parse','HEAD'],{encoding:'utf8',windowsHide:true});
@@ -36,7 +24,6 @@ export async function prepareWhale({source,home,codexHome,install=false}){
   await mkdir(code,{recursive:true});await mkdir(data,{recursive:true});
   for(const entry of ['desktop','runtime','lib','vendor','assets','scripts','.codex-plugin','package.json','LICENSE','THIRD_PARTY_NOTICES.md','PROVENANCE.md'])await cp(join(source,entry),join(code,entry),{recursive:true,errorOnExist:true,force:false});
   await writeFile(join(code,'desktop','WindowApi.cs'),selector,{flush:true});
-  await adaptWhalePresentation(code);
   const {ConfigStore}=await import(pathToFileURL(join(code,'runtime','config.mjs')));
   new ConfigStore({dataDir:data,codexHome}).save({monitorSessions:false,connectionMode:'fixed',selectedConnection:'dsh-deepseek',currency:'CNY',refreshSeconds:60,
     connections:[{id:'dsh-deepseek',name:'DSH · DeepSeek 账户余额',baseUrl:'https://api.deepseek.com',keyEnv:'DEEPSEEK_API_KEY',
