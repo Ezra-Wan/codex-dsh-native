@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { NativeWebPeer } from './native-web-peer.mjs';
 import { nativeTaskBootstrap } from './native-task-bootstrap.mjs';
 
-export const NATIVE_TASK_URI = 'ui://dsh-native/task-v9.html';
+export const NATIVE_TASK_URI = 'ui://dsh-native/task-v10.html';
 const publicTask = ({ nativeUrl, ...task }) => ({ ...task, nativeViewAvailable: typeof nativeUrl === 'string' });
 
 // The same registration is used by the production switch and the isolated

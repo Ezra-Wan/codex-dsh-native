@@ -4,7 +4,7 @@ import { createNativeMcpRpc } from './native-mcp-rpc.mjs';
 import { createNativeTaskController } from './native-task-controller.mjs';
 import { registerSessionTarget } from './native-session-target.mjs';
 import { splitNativeFonts, installNativeFonts } from './native-fonts.mjs';
-import { createNativeTaskLayout } from './native-task-layout.mjs';
+import { createNativeTaskLayout, requestNativeViewClose } from './native-task-layout.mjs';
 import { createNativeDisplayMode, registerNativePresentation } from './native-presentation.mjs';
 import { observeNativeRendering } from './native-render-evidence.mjs';
 
@@ -29,6 +29,7 @@ let lastMode;
 const nativeMode = createNativeDisplayMode();
 const layout = createNativeTaskLayout({ app, doc: document, root,
   changed: ({ mode }) => nativeMode.set(mode),
+  close: async () => { const path = await requestNativeViewClose(app); void signal('native-close-request', path); },
 });
 const controller = createNativeTaskController({ call: rawCall,
   waiting(task) { selected = task.agent_id; root.style.visibility = 'hidden'; const released = task.nativeViewAvailable === false && !['starting','running'].includes(task.status); status.textContent = released ? '原生运行时已释放，续接后恢复' : '正在连接原生会话…'; showLoading(status.textContent, !released); },
@@ -98,7 +99,7 @@ window.addEventListener('unhandledrejection', event => { void signal('rejection'
 app.onteardown = async () => { clearInterval(timer); await controller.dispose(); return {}; };
 await app.connect();
 await layout.context(app.getHostContext());
-void signal('native-card-connected', `task-v9; ${crypto.randomUUID()}; autoResize=false`);
+void signal('native-card-connected', `task-v10; ${crypto.randomUUID()}; autoResize=false; closeExtension=${typeof globalThis.openai?.requestClose === 'function'}`);
 await installNativeFonts(globalThis.__DSH_NATIVE_FONTS__ ?? []);
 delete globalThis.__DSH_NATIVE_FONTS__;
 timer = setInterval(async () => {
