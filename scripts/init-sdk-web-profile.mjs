@@ -27,8 +27,10 @@ const profileManifest = join(profileDir, 'package.json');
 if (await exists(profileManifest)) {
   await cp(join(root, 'adapter', 'web-embed'), join(profileDir, 'web-embed'), { recursive: true });
   await writeFile(join(profileDir, 'cordis.patch.yml'), WEB_RUNTIME_PATCH, 'utf8');
-  console.log('sdk-web profile present; adapter copy and browser settings refreshed.');
-  process.exit(0);
+  if(!process.argv.includes('--install')){
+    console.log('sdk-web profile present; adapter copy and browser settings refreshed; use --install to reinstall dependencies.');
+    process.exit(0);
+  }
 }
 // This manifest is self-contained; a new installation must not depend on an
 // unrelated pre-existing Web profile or a first paid task to initialize it.
@@ -62,7 +64,15 @@ await writeFile(join(profileDir, 'package.json'), JSON.stringify({
   },
 }, null, 2) + '\n');
 
-await writeFile(join(profileDir, 'pnpm-workspace.yaml'), 'packages:\n  - ./web-embed\n');
+await writeFile(join(profileDir, 'pnpm-workspace.yaml'), `packages:
+  - ./web-embed
+allowBuilds:
+  '@deepseek-ai/dsh-subprocess-local@0.2.1-rc.2': true
+  'koffi@3.1.1': true
+  'node-pty@1.2.0-beta.15': true
+  'protobufjs@7.6.6': true
+  '@google/genai': false
+`);
 await writeFile(join(profileDir, 'cordis.yml'), '# dsh profile root — composed as patches (see the web profile note).\n[]\n');
 await writeFile(join(profileDir, 'cordis.patch.yml'), WEB_RUNTIME_PATCH, 'utf8');
 if(process.argv.includes('--prepare-only')){
