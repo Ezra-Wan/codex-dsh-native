@@ -1,25 +1,46 @@
 import { DeepSeekHarness } from '@deepseek-ai/dsh-sdk-client';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, writeFile,rename } from 'node:fs/promises';
 import { join } from 'node:path';
+import {randomUUID} from 'node:crypto';
 import { WEB_RUNTIME_PATCH } from './web-profile.mjs';
 
-// Official minimal delegation setup from @deepseek-ai/dsh-subagent README:
-// service + in-process provider + model-facing tool. The sdk profile ships
-// without any of these, so subagent tasks opt in via an extra profile patch.
+// Reuse the installed base rows by ID. In this version the providers already
+// exist; adding unnamed duplicates would collide on their provider names.
 const SUBAGENT_PATCH = [
-  "- name: '@deepseek-ai/dsh-subagent'",
-  "- name: '@deepseek-ai/dsh-subagent-spawn-in-process'",
-  "- name: '@deepseek-ai/dsh-tool-subagent'",
+  '- id: subagent',
+  "  name: '@deepseek-ai/dsh-subagent'",
+  '- id: subagent-spawn-in-process',
+  "  name: '@deepseek-ai/dsh-subagent-spawn-in-process'",
+  '- id: tool-subagent',
+  "  name: '@deepseek-ai/dsh-tool-subagent'",
+  '  disabled: false',
   '  config:',
   '    provider: spawn',
   '    toolName: subagent',
 ].join('\n') + '\n';
 
+async function writePatch(path,text){const temporary=`${path}.${randomUUID()}.tmp`;await writeFile(temporary,text,'utf8');await rename(temporary,path);}
+
+// Web removes these host rows because its own session factory mounts a
+// per-agent preset. SDK agents bypass that factory, so composing sdk+web
+// without restoring SDK execution leaves only working_directory and no
+// compactor. Reuse upstream implementations/configs, patching visibility only.
+export async function writeExecutionPatch(root,{webEmbed=false,subagents=false}={}){
+  const dir=join(root,'patches');await mkdir(dir,{recursive:true});
+  const restored=['tool-jobs','tool-fs','tool-fs-search','skill-filesystem','tool-skill','command-goal','tool-goal','plan-mode','compaction-basic','command-compact','tool-result-pruner','agent-instructions','tool-todo','tool-web'];
+  const delegation=['tool-subagent-control','tool-subagent-list-agents','tool-subagent','tool-subagent-fork','workflow-ptc','tool-workflow'];
+  const rows=[...(webEmbed?restored.map(id=>`- id: ${id}\n  disabled: false`):[]),
+    ...(webEmbed?['- id: tool-bash\n  disabled: !!js process.platform === \'win32\'','- id: tool-pwsh\n  disabled: !!js process.platform !== \'win32\'']:[]),
+    ...delegation.map(id=>`- id: ${id}\n  disabled: ${!subagents}`)];
+  const path=join(dir,`execution-${webEmbed?'web':'sdk'}-${subagents?'children':'single'}.yaml`);
+  await writePatch(path,rows.join('\n')+'\n');return path;
+}
+
 export async function writeSubagentPatch(root) {
   const dir = join(root, 'patches');
   await mkdir(dir, { recursive: true });
   const path = join(dir, 'subagent.yaml');
-  await writeFile(path, SUBAGENT_PATCH, 'utf8');
+  await writePatch(path, SUBAGENT_PATCH);
   return path;
 }
 
@@ -41,7 +62,7 @@ export async function writeWebEmbedPatch(root, { port, urlFile }) {
     `    config:`,
     `      urlFile: ${JSON.stringify(urlFile)}`,
   ].join('\n') + '\n';
-  await writeFile(path, yaml, 'utf8');
+  await writePatch(path, yaml);
   return path;
 }
 

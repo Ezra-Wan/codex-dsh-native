@@ -9,12 +9,30 @@ import { promisify } from 'node:util';
 import { execFile } from 'node:child_process';
 import { applyEntryPatches, entryListSchema } from '@deepseek-ai/cordis-plugin-include';
 import * as WebApp from '@deepseek-ai/dsh-web-app';
-import { writeWebEmbedPatch } from '../src/runtime.mjs';
+import { writeWebEmbedPatch,writeExecutionPatch,writeSubagentPatch } from '../src/runtime.mjs';
 
 const require = createRequire(import.meta.resolve('@deepseek-ai/cordis-plugin-include'));
 const { load } = require('js-yaml');
 const parse = text => load(text, { schema: entryListSchema });
 const run = promisify(execFile);
+
+test('installed base + SDK + Web composition retains native SDK file tools and compaction without duplicate delegation providers',async t=>{
+  const root=await mkdtemp(join(tmpdir(),'execution-profile-'));t.after(()=>rm(root,{recursive:true,force:true}));
+  const patches=await Promise.all(['@deepseek-ai/dsh-base','@deepseek-ai/dsh-sdk-app','@deepseek-ai/dsh-web-app'].map(async name=>parse(await readFile(new URL(import.meta.resolve(`${name}/cordis.patch.yml`)),'utf8'))));
+  let entries=[];for(const patch of patches)entries=applyEntryPatches(entries,patch);
+  assert.equal(entries.find(e=>e.id==='tool-fs').disabled,true,'the real Web bundle removes host tools');
+  const originalFs=entries.find(e=>e.id==='tool-fs');
+  const execution=parse(await readFile(await writeExecutionPatch(root,{webEmbed:true}),'utf8'));
+  entries=applyEntryPatches(entries,execution);
+  for(const id of ['tool-fs','tool-fs-search','compaction-basic','command-compact','tool-result-pruner'])assert.equal(entries.find(e=>e.id===id).disabled,false,id);
+  assert.equal(entries.find(e=>e.id==='tool-fs').name,originalFs.name,'the upstream file plugin owns behavior');
+  assert.equal(entries.find(e=>e.id==='tool-subagent').disabled,true);
+  entries=applyEntryPatches(entries,parse(await readFile(await writeExecutionPatch(root,{webEmbed:true,subagents:true}),'utf8')));
+  entries=applyEntryPatches(entries,parse(await readFile(await writeSubagentPatch(root),'utf8')));
+  assert.equal(entries.filter(e=>e.name==='@deepseek-ai/dsh-subagent-spawn-in-process').length,1);
+  assert.equal(entries.find(e=>e.id==='tool-subagent').disabled,false);
+  assert.equal(entries.find(e=>e.id==='sandbox-policy').name,'@deepseek-ai/dsh-sandbox-policy','restoring tools cannot replace the permission boundary');
+});
 
 test('task overlay disables browser handoff on the actual upstream web-runtime row', async t => {
   const root = await mkdtemp(join(tmpdir(), 'web-profile-'));

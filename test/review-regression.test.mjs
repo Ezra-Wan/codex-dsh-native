@@ -205,9 +205,9 @@ test('web-embed tasks launch the sdk-web profile, pick up the adapter URL and cl
   const task = await bridge.start({ cwd: root, task: 'observed work', permission: 'read-only' });
   const runtime = await ready(fake);
   // The dispatch passed the sdk-web profile and a per-task web overlay.
-  assert.equal(runtime.patches.length, 1);
+  assert.equal(runtime.patches.length, 2);
   assert.equal(runtime.options?.profile ?? (fake.lastOptions?.profile), 'sdk-web');
-  const overlay = await readFile(runtime.patches[0], 'utf8');
+  const overlay = await readFile(runtime.patches[1], 'utf8');
   assert.match(overlay, /id: webserver/);
   assert.match(overlay, /port: 8801/, 'per-task port pinned in the overlay');
   assert.match(overlay, /@codex-dsh\/web-embed/);
@@ -227,12 +227,13 @@ test('web-embed tasks launch the sdk-web profile, pick up the adapter URL and cl
   assert.equal(await readFile(urlFile, 'utf8').then(() => true).catch(() => false), false, 'URL file removed on release');
 });
 
-test('webEmbed:false keeps the plain sdk profile without overlays', async t => {
+test('webEmbed:false keeps SDK execution without a Web overlay', async t => {
   const { root, fake, bridge } = await setup(t);
   await bridge.setEnabled(true);
   await bridge.start({ cwd: root, task: 'plain', permission: 'read-only', webEmbed: false });
   const runtime = await ready(fake);
-  assert.deepEqual(runtime.patches, []);
+  assert.equal(runtime.patches.length,1);
+  assert.doesNotMatch(await readFile(runtime.patches[0],'utf8'),/id: webserver|web-embed/);
   runtime.finish();
 });
 
