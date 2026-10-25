@@ -14,7 +14,7 @@ const add=(name,inputSchema,handler)=>server.registerTool(name,{inputSchema},asy
 });
 const id={agent_id:z.string()};
 add('dsh_start',{task:z.string(),cwd:z.string(),name:z.string().optional(),issue_id:z.string(),permission:z.string().optional(),model:z.string().optional(),provider:z.string().optional(),effort:z.string().optional()},async args=>{
-  const state=await read(),row={agent_id:randomUUID(),name:args.name,status:'running',answer:'WORKER_OK',review:{issue_id:args.issue_id,revision_round:0}};
+  const state=await read(),row={agent_id:randomUUID(),name:args.name,status:'running',answer:'WORKER_OK',review:{issue_id:args.issue_id,revision_round:0,last_verdict:null,phase:'awaiting_review',takeover_required:false}};
   state.items.push(row);state.starts++;
   const lost=process.env.FAKE_WORKER_LOST_ACK==='once'&&!state.lost;
   if(lost)state.lost=true;
@@ -29,8 +29,8 @@ add('dsh_wait',{...id,seconds:z.number().optional()},async args=>{
   return{...row,wait_outcome:'settled',finish_reason:{kind:row.status==='completed'?'completed':'interrupted'}};
 });
 add('dsh_list',{match:z.string().optional(),limit:z.number().optional(),max_chars:z.number().optional()},async({match})=>({items:(await read()).items.filter(row=>!match||row.name.includes(match))}));
-add('dsh_followup',{...id,task:z.string()},async args=>{const state=await read(),row=state.items.find(row=>row.agent_id===args.agent_id);if(row.review.verdict!=='revise')throw Error('Review revise is required');row.status='running';row.answer='FOLLOWUP_OK';row.review.revision_round++;await save(state);return row;});
+add('dsh_followup',{...id,task:z.string()},async args=>{const state=await read(),row=state.items.find(row=>row.agent_id===args.agent_id);if(row.review.phase!=='revision_ready'||row.review.takeover_required)throw Error('Review revise is required');row.status='running';row.answer='FOLLOWUP_OK';row.review={...row.review,revision_round:row.review.revision_round+1,last_verdict:null,phase:'awaiting_review'};await save(state);return row;});
 add('dsh_interrupt',id,async args=>{const state=await read(),row=state.items.find(row=>row.agent_id===args.agent_id);row.status='interrupted';await save(state);return row;});
-add('dsh_review',{...id,verdict:z.string(),feedback:z.string()},async args=>{const state=await read(),row=state.items.find(row=>row.agent_id===args.agent_id);row.review={...row.review,...args};await save(state);return row.review;});
+add('dsh_review',{...id,verdict:z.enum(['pass','revise']),feedback:z.string()},async args=>{const state=await read(),row=state.items.find(row=>row.agent_id===args.agent_id);row.review={...row.review,last_verdict:args.verdict,phase:args.verdict==='pass'?'accepted':'revision_ready',feedback:args.feedback};await save(state);return row.review;});
 add('dsh_events',{...id,after:z.union([z.number(),z.string()]),limit:z.number(),max_chars:z.number(),include_progress:z.boolean(),include_tool_events:z.boolean(),include_descendants:z.boolean()},async()=>({items:[{type:'tool/call',name:'read_file',text:'fixture.txt'}],next_cursor:'opaque:next'}));
 await server.connect(new StdioServerTransport());
