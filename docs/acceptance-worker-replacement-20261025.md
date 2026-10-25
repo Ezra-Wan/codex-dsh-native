@@ -2,7 +2,7 @@
 
 目标：日常任务优先使用原生 DSH，同一套接口可选择旧 `deepseek_worker`；原生交付失败后可以明确转交，状态不明时不重复派发。原安装、服务、历史与主 Codex 配置均保留。
 
-最新接续：用户已重新打开第二实例并返回实际显示内容，worker 基础降级观察窗目视通过。原生冷历史/子会话 UI 仍待确认。权限修复未获确认、未执行；目前继续零模型界面验收。此前因用户暂无时间关闭第二实例的收尾记录保留为历史。
+最新接续：用户已重新打开第二实例并返回实际显示内容，worker 基础降级观察窗和原生冷历史正文恢复目视通过。原生子会话 UI 仍待确认。权限修复未获确认、未执行；目前继续零模型界面验收。此前因用户暂无时间关闭第二实例的收尾记录保留为历史。
 
 ## 已交付与实测依据
 
@@ -17,7 +17,7 @@
 | 并行与停止 | `1db5c542-a6e5-49b4-a16c-093a783585bf` 与 `e928fd53-4baa-40b2-bfb4-1fa92dcb55de` 同时启动；B 到 request/header 时调用 ds_stop 得到 interrupted，A 继续运行。 |
 | 真正原生子 agent | A 真实调用 subagent、list_agents、send_message；子会话 `9497b8c6-52f7-4861-8c0c-f922738aea62` 的原生日志可独立读到 CHILD_ECHO_7259。不是 role:sub 标签。父回复加了说明句，没有遵守精确只返回标记的要求，因此原始 controls-acceptance.json 仍失败；独立只读审计确认机制，不篡改该失败记录。原生子会话的宿主内点击查看尚未目视确认。 |
 | 真实 worker 兜底 | wrapper `5c4d3caf-3334-4434-a110-ab647677e6f1` → worker `0483a240-f387-4c71-ba35-349ee8c13eed`。从真实产物不合格的 native 任务转交；实读 result.txt 验证、取得真实工具记录、重复 fallback 未产生第二任务，真实 dsh_review(pass) 成功。worker 返修续接/停止的本轮证据为离线协议验证，不能扩大成真实模型验收。 |
-| 冷历史零 prompt 重挂 | 真实 native 历史通过 native_bootstrap 重新加载原版前端资产。前后 session/turn/status/final 一致，原生日志没有新增用户 prompt、assistant 消息或 turn；0 新模型任务。此项是运行时和载体证明，新增重挂体验仍需宿主目视验收。 |
+| 冷历史零 prompt 重挂 | 后端复验 session/turn/status/final 不变且无新 prompt/assistant/turn。**新增宿主目视通过**：用户只 observe 原任务 e2cd78f8-52fc-4384-9978-32833233e147 后返回40条原纸飞机正文，首尾与原日志一致；journal仍只有1条用户prompt、1次turn/start/end、turn1，runtimeGeneration2。新诊断在14:26 UTC记录原版会话选中、mounted、可见assistant节点904字符、inline高度566。没有重发模型；本次是历史恢复，不把它当成一轮新的流式验收。 |
 | 小型代码改动与命令 | native `ce0afdef-0754-4970-9a0f-3c6285e2374c` 修复 sum 初值，测试文件逐字节不变，父控制器独立执行 3 项测试通过。但 native pwsh 初始化失败（SetNamedSecurityInfoW / Win32 5），故原生整项验收失败。剩余“执行同一条测试命令”转交 wrapper `e209c832-26de-4544-8631-10bed5f50c2f` → worker `2c93238d-d723-4882-b637-e4018cb0b83e`；读回真实 tool/result event19121，isError:false、pass3。原生失败保留，worker 兜底有效，不能称已完全替代。 |
 
 本轮真实新增共 7 个根任务（5 native、2 worker）及 1 个原生子会话，另有同 native ID 冷续接；任务数不等于模型请求数或账单。子会话存在后续消息。蓝屏后的恢复及重挂复验没有新增模型；之后的小型代码验收新增 native、worker 各一项。
@@ -52,7 +52,7 @@ Windows 系统事件记录重启于北京时间 17:28:50，BugCheck 0x50。没�
 - 原生正文真实流与 A/B 的用户目视验收沿用 [前一份报告](acceptance-native-ui-20261025.md)，不由本轮单元测试重新认定。
 - 第二实例已补 `CODEX_DSH_WORKER_CONFIG`；主实例未重载、未切换 UI、未删 MCP。
 - `worker-observe-probe.mjs` 只读展示真实已完成的 worker 任务，不提供模型派发/续接工具。用户已确认卡片显示“旧 worker 兜底”、completed、worker ID、最终结果 `proof-55a6a4b0-7 89`、read/write/present 等工具记录；与实际 input/result/worker record 核对一致。此次通过仅覆盖基础摘要显示，不包括执行中变化、逐条完整输入输出、停止交互或原生正文流；部分 tool/result summary 为空，不应夸成详情已可查看。
-- 下一项：原生冷历史/子会话导航零模型目视检查；权限修复依旧待确认，获准后再按官方脚本运行并复查 native 命令。命令问题解决前保留 worker，不安排主实例默认迁移。
+- 下一项：原生子会话导航零模型目视检查（实测父子任务位于另一隔离root，须正确只读入口，不能直接用当前 dsh_s3_test 的 ID 查找）；权限修复依旧待确认，获准后再按官方脚本运行并复查 native 命令。命令问题解决前保留 worker，不安排主实例默认迁移。
 - 待补：真实 worker 修订续接/停止场景、审批/问题、长上下文压缩、OPS、侧边余额、任务总费用守卫、接管授权状态机。Codex 自动唤醒、调用行聚合与侧边关闭闪回仍是已知边界。
 
 私有实测目录（不会入库凭据或原始请求头）：
