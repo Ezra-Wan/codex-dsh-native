@@ -258,7 +258,9 @@ export class Bridge {
     Object.assign(record, {
       status: 'starting', turn: record.turn + 1, updatedAt: new Date().toISOString(),
       error: null, final: '', finishReason: null, usage: null, progress: { eventCount: 0 }, warnings: [], recentActions: [],
-      children: {}, userTakeover: null,
+      // A continuation resumes the same native conversation. Keep descendant
+      // identities available for historical inspection across parent turns.
+      children: record.children ?? {}, userTakeover: null,
     });
     try { await this.save(record); }
     catch (error) {
