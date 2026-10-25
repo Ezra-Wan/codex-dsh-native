@@ -1,5 +1,11 @@
 # 下一模型交接：Codex 内可观察的原生 DSH 协作
 
+## 2026-10-25：关闭遗留回放自启动
+
+用户报告 Windows 反复弹出 `cmd.exe /d /s /c "dsh --profile web --no-open --port 8792"` 启动错误。命令来源已对应到 `scripts/native-replay.mjs`：原来每个 legacy MCP 启动都默认调用 `ensureNativeReplay()`，内层 Windows shell 未设置 `windowsHide`。
+
+已改为 **只有 `DSH_NATIVE_REPLAY=on` 才允许 MCP 自动启动旧回放，未设置也保持关闭**；主 Codex 配置显式设为 `off`，示例同步。手动旧适配器补 `windowsHide:true`。不重载主实例、不终止正常任务或 worker；此改动不等于将主环境迁移到新 MCP UI。下文“默认自动拉起回放”是历史实现，禁止重新照抄。
+
 ## 今日收尾与最新产品要求（2026-10-24，优先于下文历史记录）
 
 - **用户更正：流内展示应隐藏/禁用 DSH 自身的侧边抽屉；Codex 侧边展开保留完整功能。**这是待实现的产品要求，不能记成“当前流内没有抽屉”的观察或已完成项。使用官方布局/slots 控制，保留原生组件与执行能力。

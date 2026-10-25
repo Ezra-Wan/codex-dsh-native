@@ -8,6 +8,8 @@ Codex 保留自己的登录、工作区与运行环境；DeepSeek 在官方 DSH 
 
 下一模型先读 [TODO-HANDOFF.md](TODO-HANDOFF.md)：包含原生界面复用、流式接入、侧边入口、当前证据和成本约束。
 
+2026-10-25 修正：旧的 8792 回放服务不再随 MCP 默认启动，仅 `DSH_NATIVE_REPLAY=on` 显式启用时允许该兼容行为。本机主配置已设为 `off`；任务执行进程、新 MCP 原版界面及 worker 兜底不受这个开关影响。
+
 ## 使用方式
 
 在 Codex 中启用 MCP 服务 `dsh_native_p0` 后，其工具为：

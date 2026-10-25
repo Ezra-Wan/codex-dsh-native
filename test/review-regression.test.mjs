@@ -248,15 +248,21 @@ test('backend marker: worker is an explicit failover directive, native is record
   await bridge.stop(native.agent_id);
 });
 
-test('ensureNativeReplay is inert under the test guard (no service side effects)', async t => {
+test('legacy replay is inert by default, explicitly off, and with unknown settings', async t => {
   const { bridge } = await setup(t);
   const previous = process.env.DSH_NATIVE_REPLAY;
-  process.env.DSH_NATIVE_REPLAY = 'off';
   try {
-    // The guard returns at the top of the function: no state read, no spawn
-    // (the spawn call sits below the guard in bridge.mjs).
-    const result = await bridge.ensureNativeReplay();
-    assert.equal(result, null, 'guard returns without spawning');
+    bridge.nativeReplay = async () => { throw new Error('Disabled replay must not read service state'); };
+    for (const value of [undefined, 'off', '', 'true']) {
+      if (value === undefined) delete process.env.DSH_NATIVE_REPLAY;
+      else process.env.DSH_NATIVE_REPLAY = value;
+      assert.equal(await bridge.ensureNativeReplay(), null);
+    }
+    // Explicit opt-in still reuses an existing service, without launching one.
+    process.env.DSH_NATIVE_REPLAY = 'on';
+    const existing = { url: 'http://127.0.0.1:8792/', running: true };
+    bridge.nativeReplay = async () => existing;
+    assert.equal(await bridge.ensureNativeReplay(), existing);
   } finally {
     if (previous === undefined) delete process.env.DSH_NATIVE_REPLAY;
     else process.env.DSH_NATIVE_REPLAY = previous;

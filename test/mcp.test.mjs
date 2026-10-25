@@ -11,10 +11,12 @@ import { McpUiResourceMetaSchema } from '@modelcontextprotocol/ext-apps';
 test('MCP initialization, tools and switch work over real stdio without model calls', async () => {
   const root = await mkdtemp(join(tmpdir(), 'dsh-mcp-test-'));
   const client = new Client({ name: 'bridge-test', version: '1' });
+  const env = { ...process.env, CODEX_DSH_BRIDGE_HOME: root };
+  delete env.DSH_NATIVE_REPLAY; // Real MCP initialization exercises the safe default.
   const transport = new StdioClientTransport({
     command: process.execPath,
     args: [fileURLToPath(new URL('../src/server.mjs', import.meta.url))],
-    env: { ...process.env, CODEX_DSH_BRIDGE_HOME: root, DSH_NATIVE_REPLAY: 'off' },
+    env,
     stderr: 'pipe',
   });
   try {

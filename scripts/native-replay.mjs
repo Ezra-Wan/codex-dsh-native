@@ -34,6 +34,7 @@ if (previous?.url && alive(previous.pid)) {
 const child = spawn('dsh', ['--profile', 'web', '--no-open', '--port', port], {
   env: { ...process.env, DSH_HOME: home },
   shell: process.platform === 'win32',
+  windowsHide: true,
   stdio: ['ignore', 'pipe', 'pipe'],
   detached: false,
 });
