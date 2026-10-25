@@ -1,6 +1,8 @@
-import { mkdir, readFile, writeFile, rename, stat, readdir, rm, symlink } from 'node:fs/promises';
+import { mkdir, readFile, writeFile, stat, readdir, rm, symlink } from 'node:fs/promises';
 import { isAbsolute, join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
+import {atomicJson,readJson} from './state-store.mjs';
+export {atomicJson} from './state-store.mjs';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { createRuntime, writeExecutionPatch, writeSubagentPatch, writeWebEmbedPatch } from './runtime.mjs';
@@ -12,13 +14,6 @@ export const MODES = Object.freeze({
 });
 const ID = /^[a-f0-9-]{36}$/;
 const ACTIVE = new Set(['starting', 'running', 'stopping']);
-export async function atomicJson(path, data) {
-  await mkdir(resolve(path, '..'), { recursive: true });
-  const temporary = `${path}.${randomUUID()}.tmp`;
-  await writeFile(temporary, JSON.stringify(data, null, 2) + '\n', { mode: 0o600 });
-  await rename(temporary, path);
-}
-
 function errorText(error) {
   // Runtime errors can contain provider URLs. Avoid returning credentials in them.
   return String(error?.message ?? error)
@@ -101,7 +96,7 @@ export class Bridge {
   }
 
   async config() {
-    try { return JSON.parse(await readFile(join(this.root, 'settings.json'), 'utf8')); }
+    try { const config=await readJson(join(this.root,'settings.json'));return config.stateRecoveredFromBackup?{...config,enabled:false}:config; }
     catch (error) { if (error.code === 'ENOENT') return { enabled: false }; throw error; }
   }
 
@@ -111,7 +106,11 @@ export class Bridge {
     return { enabled, activeTasksContinue: true };
   }
 
-  async read(id) { return JSON.parse(await readFile(this.path(id), 'utf8')); }
+  async read(id) {
+    const record=await readJson(this.path(id));
+    if(record.agent_id!==id)throw new Error('Task identity does not match its state path');
+    return record.stateRecoveredFromBackup?{...record,status:'unknown',nativeUrl:null,error:'Task state recovered from backup; inspect runtime and native history before resuming.'}:record;
+  }
   async save(record) { await atomicJson(this.path(record.agent_id), record); }
 
   async claim(id) {
@@ -194,6 +193,7 @@ export class Bridge {
       const current = this.live.get(id);
       if (current?.busy) throw new Error('Agent is busy. Wait or stop before followup.');
       const record = current?.record ?? await this.read(id);
+      if(record.status==='unknown')throw new Error('Native state is uncertain; inspect runtime and native history before followup.');
       if(record.fallbackReserved)throw new Error('This native task was retired for worker fallback; continue its fallback task instead.');
       await this.assertSessionQuiet(record);
       return this.launch(record, task);
@@ -397,6 +397,7 @@ export class Bridge {
     let entry=this.live.get(id);
     if(entry?.runtime&&!entry.releasing)return this.summary(entry.record);
     const record=entry?.record??await this.read(id);
+    if(record.status==='unknown'||record.stateRecoveredFromBackup)throw new Error('Uncertain native state needs inspection before opening a new runtime');
     if(!record.webEmbed||!record.persisted||record.fallbackReserved)throw new Error('This task has no restorable native history view');
     if(entry?.busy)throw new Error('Native runtime is still starting');
     await this.assertSessionQuiet(record);

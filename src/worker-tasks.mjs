@@ -3,6 +3,7 @@ import { isAbsolute,join,resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { atomicJson,MODES } from './bridge.mjs';
 import { WorkerMcpClient } from './worker-client.mjs';
+import {readJson} from './state-store.mjs';
 
 const ID=/^[a-f0-9-]{36}$/;
 const ACTIVE=new Set(['starting','running','stopping','unknown']);
@@ -20,7 +21,11 @@ export class WorkerTasks {
   serial(fn){const p=this.gate.then(fn);this.gate=p.catch(()=>{});return p;}
   path(id){if(!ID.test(id))throw Error('Invalid bridge task id');return join(this.root,`${id}.json`);}
   async has(id){try{await stat(this.path(id));return true;}catch(e){if(e.code==='ENOENT')return false;throw e;}}
-  async read(id){return this.entries.get(id)?.record??JSON.parse(await readFile(this.path(id),'utf8'));}
+  async read(id){
+    if(this.entries.has(id))return this.entries.get(id).record;
+    const record=await readJson(this.path(id));if(record.agent_id!==id)throw Error('Worker identity does not match its state path');
+    return record.stateRecoveredFromBackup?{...record,status:'unknown',submission:'uncertain',error:'Task state recovered from backup; reconcile worker identity before continuing.'}:record;
+  }
   save(record){
     const snapshot=structuredClone(record),id=record.agent_id;
     const p=(this.writes.get(id)??Promise.resolve()).catch(()=>{}).then(()=>atomicJson(this.path(id),snapshot));
@@ -131,7 +136,7 @@ export class WorkerTasks {
     if(record.expectedRevision!==undefined&&value.review?.revision_round!==record.expectedRevision){
       record.status='unknown';record.error='Followup acknowledgement is uncertain; current worker review round does not prove acceptance';await this.save(record);return;
     }
-    record.submission='acknowledged';record.error=null;
+    record.submission='acknowledged';record.error=null;delete record.stateRecoveredFromBackup;
     await this.apply(record,value);await this.save(record);
     if(value.wait_outcome!=='settled'){
       entry.busy=true;
