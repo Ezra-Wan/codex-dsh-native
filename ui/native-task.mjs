@@ -23,19 +23,10 @@ let selected, polling = false, timer;
 let lastMode;
 const nativeMode = createNativeDisplayMode();
 const layout = createNativeTaskLayout({ app, doc: document, root,
-  persist: (agent_id, collapsed) => rawCall('native_presentation', { agent_id, collapsed }),
-  changed: ({ mode, collapsed }) => {
-    nativeMode.set(mode);
-    document.getElementById('flow').hidden = mode === 'fullscreen';
-    document.getElementById('flow').textContent = collapsed ? '▾ 在对话内展开' : '▴ 收起对话内视图';
-    document.getElementById('flow').setAttribute('aria-expanded', String(!collapsed));
-    document.getElementById('flow').setAttribute('aria-controls', 'root');
-    document.getElementById('expand').textContent = mode === 'fullscreen' ? '关闭侧边视图' : '▥ 在侧边查看';
-    document.getElementById('expand').title = mode === 'fullscreen' ? '返回对话，保持对话内视图收起' : '请求 Codex 在侧边区域打开原生 DSH';
-  },
+  changed: ({ mode }) => nativeMode.set(mode),
 });
 const controller = createNativeTaskController({ call: rawCall,
-  waiting(task) { selected = task.agent_id; layout.task(selected, task.presentation); root.style.visibility = 'hidden'; status.textContent = task.nativeViewAvailable === false && !['starting','running'].includes(task.status) ? '原生运行时已释放，续接后恢复' : '正在连接原生会话…'; },
+  waiting(task) { selected = task.agent_id; root.style.visibility = 'hidden'; status.textContent = task.nativeViewAvailable === false && !['starting','running'].includes(task.status) ? '原生运行时已释放，续接后恢复' : '正在连接原生会话…'; },
   failed(error) { status.textContent = error.message; void signal('native-view-failed', error.message); },
   async mount({ viewId, task, bootstrap }) {
     // Capture this capability, never route an old stream through a new task.
@@ -64,7 +55,7 @@ const controller = createNativeTaskController({ call: rawCall,
     try { await entry.run(error => { throw error; }); }
     catch (error) { rpc.dispose(); await entry.dispose(); throw error; }
     root.style.visibility = 'visible'; status.textContent = `${task.name || 'DSH'} · ${task.role === 'sub' ? '派生任务' : '协作工作区'} · ${task.status}`;
-    layout.restore(task.presentation); layout.mounted();
+    layout.mounted();
     void signal('native-view-mounted', task.session_id);
     const stopEvidence = bootstrap.diagnostics ? observeNativeRendering(root, { mode: nativeMode,
       signal: (event, detail) => signal(event, JSON.stringify({ agent_id: task.agent_id, viewId, sample: JSON.parse(detail) })) }) : () => {};
@@ -95,28 +86,18 @@ app.onhostcontextchanged = context => {
   // Stable native root: no teardown or remount on a display-mode notification.
 };
 window.addEventListener('resize', () => { void layout.context({ displayMode: layout.mode, containerDimensions: { height: innerHeight } }); });
-document.getElementById('expand').addEventListener('click', () => {
-  const mode = layout.mode === 'fullscreen' ? 'inline' : 'fullscreen';
-  void (async () => {
-    // Collapse the inline source BEFORE a host creates a fullscreen copy.
-    await layout.setCollapsed(true);
-    const actual = await app.requestDisplayMode({ mode });
-    await layout.context({ displayMode: actual.mode });
-  })().catch(error => { status.textContent = error.message; });
-});
-document.getElementById('flow').addEventListener('click', () => { void layout.setCollapsed(!layout.collapsed).catch(error => { status.textContent = error.message; }); });
 window.addEventListener('error', event => { void signal('error', event.message); });
 window.addEventListener('unhandledrejection', event => { void signal('rejection', event.reason?.message ?? event.reason); });
 app.onteardown = async () => { clearInterval(timer); await controller.dispose(); return {}; };
 await app.connect();
 await layout.context(app.getHostContext());
-void signal('native-card-connected', `task-v5; ${crypto.randomUUID()}; autoResize=false`);
+void signal('native-card-connected', `task-v6; ${crypto.randomUUID()}; autoResize=false`);
 await installNativeFonts(globalThis.__DSH_NATIVE_FONTS__ ?? []);
 delete globalThis.__DSH_NATIVE_FONTS__;
 timer = setInterval(async () => {
   if (!selected || polling || document.hidden) return;
   polling = true;
-  try { const state = await rawCall('native_state', { agent_id: selected }); if (state.agent_id === selected) { layout.restore(state.presentation); await controller.select(state); } }
+  try { const state = await rawCall('native_state', { agent_id: selected }); if (state.agent_id === selected) await controller.select(state); }
   catch (error) { status.textContent = error.message; }
   finally { polling = false; }
 }, 5000);
