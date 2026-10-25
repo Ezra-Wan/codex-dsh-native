@@ -81,6 +81,10 @@ export function registerNativeTaskUi(server, { resolveTask, listTasks, retainVie
 
 export function bridgeTaskResolver(bridge) {
   return async (id, wait = false) => {
+    if(wait&&!bridge.live.get(id)?.runtime){
+      const live=bridge.live.get(id),record=live?.record??await bridge.read(id);
+      if(!live?.busy&&record.webEmbed&&record.persisted&&!record.fallbackReserved)await bridge.openView(id);
+    }
     const deadline = Date.now() + (wait ? 25000 : 0);
     while (true) {
       const live = bridge.live.get(id);
