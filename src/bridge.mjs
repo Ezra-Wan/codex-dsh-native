@@ -14,6 +14,7 @@ export const MODES = Object.freeze({
 });
 const ID = /^[a-f0-9-]{36}$/;
 const ACTIVE = new Set(['starting', 'running', 'stopping']);
+const checkParallel=value=>{if(!Number.isInteger(value)||value<1||value>8)throw new Error('maxParallel must be an integer from 1 to 8');return value;};
 function errorText(error) {
   // Runtime errors can contain provider URLs. Avoid returning credentials in them.
   return String(error?.message ?? error)
@@ -35,7 +36,7 @@ export class Bridge {
     this.tasks = join(this.root, 'tasks');
     this.runtimeFactory = runtimeFactory;
     this.idleMs = idleMs;
-    this.maxParallel = maxParallel;
+    this.maxParallel = checkParallel(maxParallel);
     this.patches = patches;
     this.webEmbedBasePort = webEmbedBasePort;
     this.live = new Map();
@@ -48,6 +49,7 @@ export class Bridge {
     await mkdir(this.tasks, { recursive: true });
     await mkdir(this.home, { recursive: true });
     await mkdir(join(this.root, 'task-urls'), { recursive: true });
+    const saved=await this.config();if(saved.maxParallel!==undefined)this.maxParallel=checkParallel(saved.maxParallel);
     return this;
   }
 
@@ -100,11 +102,15 @@ export class Bridge {
     catch (error) { if (error.code === 'ENOENT') return { enabled: false }; throw error; }
   }
 
-  async setEnabled(enabled) {
-    if (typeof enabled !== 'boolean') throw new Error('enabled must be boolean');
-    await atomicJson(join(this.root, 'settings.json'), { enabled });
-    return { enabled, activeTasksContinue: true };
-  }
+  setEnabled(enabled) {return this.configure({enabled});}
+  configure({enabled,maxParallel}={}) {return this.admit(async()=>{
+    if(enabled!==undefined&&typeof enabled!=='boolean')throw new Error('enabled must be boolean');
+    if(maxParallel!==undefined)checkParallel(maxParallel);
+    const previous=await this.config(),next={...previous,enabled:enabled??previous.enabled??false,maxParallel:maxParallel??this.maxParallel};
+    delete next.stateRecoveredFromBackup;
+    await atomicJson(join(this.root,'settings.json'),next);this.maxParallel=next.maxParallel;
+    return{...next,activeTasksContinue:true};
+  });}
 
   async read(id) {
     const record=await readJson(this.path(id));

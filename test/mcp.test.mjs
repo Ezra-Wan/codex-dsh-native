@@ -43,7 +43,9 @@ test('MCP initialization, tools and switch work over real stdio without model ca
     };
     assert.equal((await get({})).enabled, false);
     assert.equal((await get({ enabled: true })).enabled, true);
+    const limits=await get({maxParallel:4});assert.equal(limits.enabled,true);assert.equal(limits.maxParallel,4);
     assert.equal((await get({ enabled: false })).enabled, false);
+    assert.equal((await get({})).maxParallel,4);
     const refused = await client.callTool({ name: 'ds_start', arguments: { cwd: root, task: 'Do not execute while disabled.' } });
     assert.equal(refused.isError, true);
     assert.match(refused.content[0].text, /disabled/);

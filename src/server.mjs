@@ -59,10 +59,11 @@ if (arg) {
       _meta: { ui: { prefersBorder: true, csp: { frameDomains: ['http://127.0.0.1:*'] } }, 'openai/ui': { availableDisplayModes: ['inline', 'fullscreen'], preferredDisplayMode: 'inline' } },
     }],
   }));
-  add('ds_bridge', 'Inspect native bridge tasks or explicitly turn new dispatches on/off. Turning off does not interrupt running tasks.', {
+  add('ds_bridge', 'Inspect tasks, toggle new dispatches, or dynamically set maxParallel (1..8). Default 2; applies to native root tasks and resident runtimes in this MCP process, not native child agents or the retained worker. Lowering never interrupts existing tasks/views; new work waits for capacity. Settings persist for the next connection. Dispatch first and collect later when independent tasks can overlap.', {
     enabled: z.boolean().optional(),
-  }, async ({ enabled }) => {
-    if (enabled !== undefined) await bridge.setEnabled(enabled);
+    maxParallel:z.number().int().min(1).max(8).optional(),
+  }, async ({ enabled,maxParallel }) => {
+    if (enabled !== undefined||maxParallel!==undefined) await bridge.configure({enabled,maxParallel});
     return bridge.list();
   });
   add('ds_start', 'Start a persistent DSH task asynchronously. backend:native uses the original native harness and body stream; backend:worker uses the retained configured deepseek_worker through MCP, with durable wrapper and worker_agent_id identities. Worker requires stable issue_id and ds_review(pass/revise) before revision; it cannot promise native UI streaming or subagents. An explicit unsupported maxTokens is rejected before dispatch, never silently dropped. Native light defaults to 8192 output tokens/request, coding to 32768; caps are not context or total-cost limits. Continue independent parent work and collect with ds_wait. Caller prepares cwd/separate worktrees; role peer/sub is an organizational label. subagents:true mounts official native delegation. User takeover is not implemented; native message input is hidden. Never duplicate an unknown or possibly running task on the other backend; inspect and stop/reconcile first.', {
