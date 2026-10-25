@@ -296,6 +296,15 @@ test('descendant session events land in children, not as bridge agents', async t
   await assert.rejects(bridge.followup(childId, 'drive'), /ENOENT|Invalid agent_id/);
 });
 
+test('child OPS executor failures remain visible in parent completion even when the plugin uses isError=false',async t=>{
+  const {root,bridge,fake}=await setup(t);await bridge.setEnabled(true);
+  const task=await bridge.start({cwd:root,task:'observe child failure',permission:'read-only',webEmbed:false});const runtime=await ready(fake),child='11111111-2222-3333-4444-555555555555';
+  runtime.emit({type:'tool/call',seq:2,time:2,data:{callId:'ops1',name:'ops_bash',arguments:'{}'}},child);
+  runtime.emit({type:'tool/result',seq:3,time:3,data:{message:{toolCallId:'ops1',isError:false,content:[{type:'text',text:'[error: EXECUTOR_UNAVAILABLE: native shell did not start]\n[exit code: 256]'}]}}},child);
+  runtime.finish();const done=await bridge.wait(task.agent_id);assert.equal(done.status,'completed_with_warnings');assert.equal(done.warnings[0].session_id,child);assert.equal(done.warnings[0].tool,'ops_bash');
+  const disk=await bridge.read(task.agent_id);assert.match(disk.warnings[0].message,/EXECUTOR_UNAVAILABLE/);
+});
+
 test('extra user prompts mark a user takeover for the next parent read', async t => {
   const { root, bridge, fake } = await setup(t);
   await bridge.setEnabled(true);
