@@ -1,5 +1,7 @@
 # Agent 模型 TODO：子 agent（原生模块）+ peer（拷贝工作区）+ 用户接管
 
+> **2026-10-25 校正，以交接文首当前 TODO 为准。** 以下是分层设计和历史记录，不代表全量实现：worktree 由调用方手动准备，bridge 只接收 cwd；`role:sub` 不自动建立原生父子关系；普通用户输入区已按当前要求隐藏，正式接管授权仍待做。8792 全局回放已退役默认启动，不能照下文旧 L4 恢复常驻。新 MCP 原版正文流已在第二实例通过真实验收，真实 native 父子与完整操作仍待实测。
+
 创建：2026-10-23，Asia/Shanghai。独立于 [TODO-HANDOFF.md](TODO-HANDOFF.md)（那边管观察链路与宿主验收）；本文管**agent 组织模型**。设计定稿见当日对话，事实核查基于官方包 README（`dsh-subagent` / `dsh-tool-subagent` / `dsh-subagent-spawn-in-process` / `dsh-client-ui-subagent`）。
 
 2026-10-24 最新交互与插件要求统一见 [TODO-HANDOFF.md 文首](TODO-HANDOFF.md)：每任务单条 `dsh-xxx` 状态、区分“同步工作区”与原生子 agent、单击展开实际执行会话的 DSH 原生逐段流；OPS 在任务运行环境中始终可用，余额仅在侧边展开时可用。本文件的角色/工作区流程沿用原约定，展示项不得继续复活已归档的手写原型。
