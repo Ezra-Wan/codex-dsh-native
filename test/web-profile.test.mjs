@@ -79,3 +79,13 @@ test('refreshing an existing profile replaces the obsolete web-app override with
   assert.equal(patch[0].config.printUrl, false);
   assert.match(await readFile(join(dir, 'web-embed', 'lib', 'index.js'), 'utf8'), /connectionCtx\.webServer/);
 });
+
+test('a fresh sdk-web profile can be prepared without any existing Web home or model dispatch',async t=>{
+  const home=await mkdtemp(join(tmpdir(),'web-profile-fresh-'));t.after(()=>rm(home,{recursive:true,force:true}));
+  await run(process.execPath,[fileURLToPath(new URL('../scripts/init-sdk-web-profile.mjs',import.meta.url)),'--home',home,'--prepare-only'],{timeout:5000});
+  const profile=JSON.parse(await readFile(join(home,'profiles/sdk-web/package.json'),'utf8'));
+  assert.deepEqual(profile.dsh.profile.bundles,['@deepseek-ai/dsh-base','@deepseek-ai/dsh-sdk-app','@deepseek-ai/dsh-web-app']);
+  assert.equal(profile.dependencies['@deepseek-ai/dsh-sdk-app'],'0.2.1-rc.2');
+  const patch=parse(await readFile(join(home,'profiles/sdk-web/cordis.patch.yml'),'utf8'));
+  assert.equal(patch[0].config.openBrowser,false);
+});
