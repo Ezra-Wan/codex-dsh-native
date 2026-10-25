@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createNativeTaskController } from '../ui/native-task-controller.mjs';
 import { registerSessionTarget } from '../ui/native-session-target.mjs';
+import { createNativeDisplayMode, registerNativePresentation } from '../ui/native-presentation.mjs';
 import { nativeTaskBootstrap } from '../src/native-task-bootstrap.mjs';
 import { splitNativeFonts } from '../ui/native-fonts.mjs';
 import { registerNativeTaskUi } from '../src/native-task-ui.mjs';
@@ -16,9 +17,11 @@ test('the installed native module parser accepts our receiver and rejects its pr
   runInNewContext(source,{window:{__ModuleLoader__:{load:entry=>{factory=entry.factory;}}}});
   const {parseBootManifest}=factory(()=>{throw new Error('The native parser needs no external module');});
   const workspace='@deepseek-ai/dsh-client-ui-workspace';
-  const boot={rev:'native-receiver-contract',entries:[{id:workspace,url:'/workspace.js',rev:'1'}],
-    batches:[{phase:'application',url:'/workspace.js',rev:'1',entries:[workspace]}]};
+  const deps=[workspace,'@deepseek-ai/dsh-client-ui-layout','@deepseek-ai/dsh-client-ui-sidebar-right'];
+  const boot={rev:'native-receiver-contract',entries:deps.map(id=>({id,url:'/workspace.js',rev:'1'})),
+    batches:[{phase:'application',url:'/workspace.js',rev:'1',entries:deps}]};
   registerSessionTarget({loader:{load(){}},boot,readTarget:()=>undefined});
+  registerNativePresentation({loader:{load(){}},boot,mode:createNativeDisplayMode(),doc:{}});
   assert.doesNotThrow(()=>parseBootManifest(boot));
   boot.batches.pop();
   assert.throws(()=>parseBootManifest(boot),/belongs to no initial-load batch/);

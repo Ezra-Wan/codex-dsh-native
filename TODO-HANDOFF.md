@@ -1,5 +1,16 @@
 # 下一模型交接：Codex 内可观察的原生 DSH 协作
 
+## 2026-10-25：恢复开发，流内只保留原生主内容
+
+用户已要求继续工作，前一天的结束实验约束已解除；继续使用隔离第二实例，不重载主实例。
+
+- [x] 流内隐藏原生左右侧栏及拖拽柄；通过官方 slot 优先级隐藏右抽屉按钮。Codex 侧边模式撤销该呈现策略，恢复原生占位与按钮。执行服务、插件工具、原生会话与正文组件保留，不靠替换 transcript 实现。
+- [x] 使用已安装的真实 `SlotRegistry` 与 Cordis 验证切换和卸载生命周期；原生 boot 清单解析器验证新增模块的批次归属。
+- [ ] **宿主目视仍待验**：v4 包含上述呈现策略及 v3 高度/折叠行为；尚不能据离线检查声称抽屉、高度、抖动全部解决。
+- [ ] 下一顺序：第二实例 A/B 精确历史及布局 → 新载体执行中正文增长 → 原生子 agent/操作 → worker 统一兜底与插件。
+
+实现接缝说明：DSH `0.2.1-rc.2` 的公开 layout 服务没有整列移除开关。按钮用官方 `conversation.session.header.corner` shadow；列占位用原生 frame 的 `data-rightbar-col` 结构标记做局部 CSS 适配，不依赖散列类名。此适配应随上游版本一起复验。原生侧栏服务仍挂载，不能解释为后端功能被禁用。
+
 ## 2026-10-25：关闭遗留回放自启动
 
 用户报告 Windows 反复弹出 `cmd.exe /d /s /c "dsh --profile web --no-open --port 8792"` 启动错误。命令来源已对应到 `scripts/native-replay.mjs`：原来每个 legacy MCP 启动都默认调用 `ensureNativeReplay()`，内层 Windows shell 未设置 `windowsHide`。
