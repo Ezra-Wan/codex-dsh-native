@@ -73,6 +73,7 @@ if (arg) {
     mode: z.enum(['light', 'coding']).default('light'),
     role: z.enum(['sub', 'peer']).default('peer'),
     subagents: z.boolean().default(false),
+    ops:z.enum(['off','files','full']).default('off').describe('Opt-in original dsh-ops@0.3.0: files enables native file tools; full also enables bundled shell. Requires separately installed isolated OPS profiles. Full workspace-write shell may prepare directory permissions via the plugin; do not use it to bypass a pending permission decision. Background/PTC remain disabled. Retained worker OPS support is unverified.'),
     backend: z.enum(['native', 'worker']).default('native'),
     issue_id: z.string().min(1).max(200).optional().describe('Required for worker: stable issue identity across corrections; never change it to evade the worker correction budget.'),
     webEmbed: z.boolean().default(true),
