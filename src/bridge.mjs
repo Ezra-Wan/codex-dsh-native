@@ -1,6 +1,8 @@
-import { mkdir, readFile, writeFile, rename, stat, readdir, rm, symlink } from 'node:fs/promises';
+import { mkdir, readFile, writeFile, stat, readdir, rm, symlink } from 'node:fs/promises';
 import { isAbsolute, join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
+import {atomicJson,readJson} from './state-store.mjs';
+export {atomicJson} from './state-store.mjs';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { createRuntime, writeExecutionPatch, writeSubagentPatch, writeWebEmbedPatch } from './runtime.mjs';
@@ -12,13 +14,6 @@ export const MODES = Object.freeze({
 });
 const ID = /^[a-f0-9-]{36}$/;
 const ACTIVE = new Set(['starting', 'running', 'stopping']);
-export async function atomicJson(path, data) {
-  await mkdir(resolve(path, '..'), { recursive: true });
-  const temporary = `${path}.${randomUUID()}.tmp`;
-  await writeFile(temporary, JSON.stringify(data, null, 2) + '\n', { mode: 0o600 });
-  await rename(temporary, path);
-}
-
 function errorText(error) {
   // Runtime errors can contain provider URLs. Avoid returning credentials in them.
   return String(error?.message ?? error)
@@ -59,6 +54,7 @@ export class Bridge {
   // Each web-embed task owns one loopback port; allocation is deterministic
   // from the base and skips ports already handed out in this process.
   nextWebPort() {
+    while([...this.live.values()].some(entry=>entry.record.webPort===this.webEmbedBasePort+this.portCursor+1))this.portCursor++;
     if (this.webEmbedBasePort + this.portCursor + 1 > 65535) {
       throw new Error('Web port range exhausted; restart the bridge with a lower CODEX_DSH_WEB_BASE_PORT.');
     }
@@ -100,7 +96,7 @@ export class Bridge {
   }
 
   async config() {
-    try { return JSON.parse(await readFile(join(this.root, 'settings.json'), 'utf8')); }
+    try { const config=await readJson(join(this.root,'settings.json'));return config.stateRecoveredFromBackup?{...config,enabled:false}:config; }
     catch (error) { if (error.code === 'ENOENT') return { enabled: false }; throw error; }
   }
 
@@ -110,7 +106,11 @@ export class Bridge {
     return { enabled, activeTasksContinue: true };
   }
 
-  async read(id) { return JSON.parse(await readFile(this.path(id), 'utf8')); }
+  async read(id) {
+    const record=await readJson(this.path(id));
+    if(record.agent_id!==id)throw new Error('Task identity does not match its state path');
+    return record.stateRecoveredFromBackup?{...record,status:'unknown',nativeUrl:null,error:'Task state recovered from backup; inspect runtime and native history before resuming.'}:record;
+  }
   async save(record) { await atomicJson(this.path(record.agent_id), record); }
 
   async claim(id) {
@@ -193,6 +193,7 @@ export class Bridge {
       const current = this.live.get(id);
       if (current?.busy) throw new Error('Agent is busy. Wait or stop before followup.');
       const record = current?.record ?? await this.read(id);
+      if(record.status==='unknown')throw new Error('Native state is uncertain; inspect runtime and native history before followup.');
       if(record.fallbackReserved)throw new Error('This native task was retired for worker fallback; continue its fallback task instead.');
       await this.assertSessionQuiet(record);
       return this.launch(record, task);
@@ -272,26 +273,7 @@ export class Bridge {
         // Subagent tasks add the official delegation patch below global ones;
         // web-embed tasks add the per-task webserver port + URL-file adapter
         // on the sdk-web profile (official UI in THIS process → native stream).
-        let patches = [...this.patches,await writeExecutionPatch(this.root,{webEmbed:!!record.webEmbed,subagents:!!record.subagents})];
-        if (record.subagents) patches = [...patches, await writeSubagentPatch(this.root)];
-        if (record.webEmbed) {
-          const urlFile = join(this.root, 'task-urls', `${record.webPort}.json`);
-          await rm(urlFile, { force: true });
-          patches = [...patches, await writeWebEmbedPatch(this.root, { port: record.webPort, urlFile })];
-          record.webUrlFile = urlFile;
-          // A NEW runtime generation mints a NEW in-process token; any URL
-          // from a previous generation is stale the moment its process died.
-          record.runtimeGeneration = (record.runtimeGeneration ?? 0) + 1;
-        }
-        entry.runtime = this.runtimeFactory(record, { home: record.webEmbed ? await this.prepareTaskHome(record.agent_id) : this.home, patches, ...(record.webEmbed ? { profile: 'sdk-web' } : {}) });
-        record.runtimeMayExist=true;await this.save(record);
-        await entry.runtime.start();
-        if (record.persisted) await entry.runtime.resumeSession(record.session_id);
-        else {
-          // Create and persist the native identity before the first paid turn.
-          await entry.runtime.session(record.session_id).getWorkingDirectory();
-          record.persisted = true;
-        }
+        await this.prepareRuntime(entry);
       }
       if (entry.cancel) throw new Error('Interrupted before prompt');
       record.status = 'running';
@@ -394,6 +376,48 @@ export class Bridge {
     }
   }
 
+  async prepareRuntime(entry){
+    const record=entry.record;
+    let patches=[...this.patches,await writeExecutionPatch(this.root,{webEmbed:!!record.webEmbed,subagents:!!record.subagents})];
+    if(record.subagents)patches.push(await writeSubagentPatch(this.root));
+    if(record.webEmbed){
+      const urlFile=join(this.root,'task-urls',`${record.webPort}.json`);await rm(urlFile,{force:true});
+      patches.push(await writeWebEmbedPatch(this.root,{port:record.webPort,urlFile}));
+      record.webUrlFile=urlFile;record.runtimeGeneration=(record.runtimeGeneration??0)+1;record.nativeUrl=null;
+    }
+    entry.runtime=this.runtimeFactory(record,{home:record.webEmbed?await this.prepareTaskHome(record.agent_id):this.home,patches,...(record.webEmbed?{profile:'sdk-web'}:{})});
+    record.runtimeMayExist=true;await this.save(record);await entry.runtime.start();
+    if(record.persisted)await entry.runtime.resumeSession(record.session_id);
+    else{await entry.runtime.session(record.session_id).getWorkingDirectory();record.persisted=true;}
+  }
+
+  // Restore original history through the official SDK, without run/prompt,
+  // without a new turn and without reconstructing a model transcript.
+  async openView(id){return this.admit(async()=>{
+    let entry=this.live.get(id);
+    if(entry?.runtime&&!entry.releasing)return this.summary(entry.record);
+    const record=entry?.record??await this.read(id);
+    if(record.status==='unknown'||record.stateRecoveredFromBackup)throw new Error('Uncertain native state needs inspection before opening a new runtime');
+    if(!record.webEmbed||!record.persisted||record.fallbackReserved)throw new Error('This task has no restorable native history view');
+    if(entry?.busy)throw new Error('Native runtime is still starting');
+    await this.assertSessionQuiet(record);
+    if(!entry){
+      if(this.live.size>=this.maxParallel){
+        const idle=[...this.live.values()].find(item=>!item.busy&&!item.viewCount);
+        if(idle)await this.release(idle.record.agent_id);else throw new Error('Native view capacity is occupied; close another view first');
+      }
+      entry={record,release:await this.claim(id),runtime:null,timer:null,busy:false,cancel:false};this.live.set(id,entry);
+    }
+    try{
+      await this.prepareRuntime(entry);
+      entry.urlWait=this.awaitWebUrl(entry).finally(()=>{entry.urlWait=null;});await entry.urlWait;
+      if(!record.nativeUrl)throw new Error('Native history runtime started but its view URL did not arrive');
+      record.lastSelfWriteAt=Date.now();await this.save(record);
+      entry.timer=setTimeout(()=>this.admit(()=>this.release(id)).catch(()=>{}),this.idleMs);entry.timer.unref();
+      return this.summary(record);
+    }catch(error){await this.release(id,{force:true});throw error;}
+  });}
+
   summary(record) {
     const { agent_id, session_id, name, mode, model, maxTokens, permission, cwd, turn, status, progress, error, resultPath, finishReason, usage } = record;
     const final = (record.final ?? '').slice(0, record.returnChars);
@@ -406,6 +430,7 @@ export class Bridge {
       ...(children.length ? { children } : {}),
       ...(record.userTakeover ? { userTakeover: record.userTakeover } : {}),
       ...(record.fallbackReserved?{fallbackReserved:true,fallbackAgentId:record.fallbackAgentId??null}:{}),
+      ...(record.webEmbed&&record.persisted&&!record.fallbackReserved?{nativeViewRestorable:true}:{}),
       error,
       warnings: record.warnings ?? [],
       recentActions: (record.recentActions ?? []).slice(-6).map(action => ({ ...action, text: action.text?.slice(0, 600), truncated: action.truncated || action.text?.length > 600 })),

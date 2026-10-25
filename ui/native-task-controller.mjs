@@ -23,7 +23,7 @@ export function createNativeTaskController({ call, mount, worker, waiting = () =
     }
     if (!force && pendingTarget?.agentId === task.agent_id && (pendingTarget.generation === undefined || task.runtimeGeneration === undefined || task.runtimeGeneration === pendingTarget.generation)) return chain;
     if (!force && failedTarget?.agentId === task.agent_id && (task.runtimeGeneration === undefined || task.runtimeGeneration === failedTarget.generation)) return Promise.resolve();
-    if (task.nativeViewAvailable === false && !['starting', 'running'].includes(task.status)) {
+    if (task.nativeViewAvailable === false && !task.nativeViewRestorable && !['starting', 'running'].includes(task.status)) {
       ++sequence; waiting(task);
       chain = chain.catch(() => {}).then(async () => { const previous = current; current = null; await close(previous); });
       return chain;

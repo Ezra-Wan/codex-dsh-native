@@ -33,7 +33,7 @@ const layout = createNativeTaskLayout({ app, doc: document, root,
   close: async () => { const path = await requestNativeViewClose(app); void signal('native-close-request', path); },
 });
 const controller = createNativeTaskController({ call: rawCall,
-  waiting(task) { selected = task.agent_id; document.getElementById('worker-fallback').hidden=true; root.style.visibility = 'hidden'; const released = task.nativeViewAvailable === false && !['starting','running'].includes(task.status); status.textContent = task.backend==='worker'?'正在连接旧 worker…':released ? '原生运行时已释放，续接后恢复' : '正在连接原生会话…'; showLoading(status.textContent, !released); },
+  waiting(task) { selected = task.agent_id; document.getElementById('worker-fallback').hidden=true; root.style.visibility = 'hidden'; const released = task.nativeViewAvailable === false && !task.nativeViewRestorable && !['starting','running'].includes(task.status); status.textContent = task.backend==='worker'?'正在连接旧 worker…':released ? '该任务暂无可恢复的原生界面' : task.nativeViewRestorable&&!task.nativeViewAvailable?'正在恢复原生历史（不调用模型）…':'正在连接原生会话…'; showLoading(status.textContent, !released); },
   failed(error) { status.textContent = error.message; showLoading(error.message, false); void signal('native-view-failed', error.message); },
   worker(task){
     selected=task.agent_id;root.style.visibility='hidden';document.getElementById('native-loading').hidden=true;
