@@ -19,3 +19,7 @@
 - 此类检查是自动扫描和范围核查，不是“保证不存在任何隐私或漏洞”。没有把应用场景的运行时事实换成测试通过的口号。
 
 未进行本机 Wi-Fi 关闭、主实例重载、云训练操作或新的模型付费调用。Windows Shell/OPS并发故障、费用估算及宿主显示等已知边界保持在预览说明中。发布和公开是否成功，以 GitHub Release/可见性和 CI 实际结果为准。
+
+## 发布结果
+
+仓库已公开；[预览 Release](https://github.com/Ezra-Wan/codex-dsh-native/releases/tag/v0.1.2-preview.1)已发布，源码标签207971e。[GitHub Windows/Node24 CI](https://github.com/Ezra-Wan/codex-dsh-native/actions/runs/40210942102)成功。无认证请求可读取Release并下载430382字节源码包，SHA256为 deeb27c48668a63dc3642ecc7203e618b13d892e8d4d22f817f58a1c8ecef176，与上传前一致。此次额外文档记录不改变已发布源码标签。
