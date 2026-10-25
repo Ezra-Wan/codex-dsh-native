@@ -294,6 +294,17 @@ test('descendant session events land in children, not as bridge agents', async t
   assert.equal(done.children[0].child_id, childId);
   // The child id is not itself an agent: following it up must fail.
   await assert.rejects(bridge.followup(childId, 'drive'), /ENOENT|Invalid agent_id/);
+  await bridge.release(task.agent_id);
+  const cold = await new Bridge({ root, runtimeFactory: fake.create }).init();
+  t.after(() => cold.close());
+  await cold.followup(task.agent_id, 'continue without losing previous children');
+  const nextRuntime = await ready(fake, 1);
+  const nextChild = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
+  nextRuntime.emit({ type: 'turn/start', seq: 1, time: 3, data: { turn: 1 } }, nextChild);
+  nextRuntime.finish();
+  const continued = await cold.wait(task.agent_id);
+  assert.deepEqual(continued.children.map(child => child.child_id).sort(), [childId, nextChild].sort());
+  assert.deepEqual(Object.keys((await cold.read(task.agent_id)).children).sort(), [childId, nextChild].sort());
 });
 
 test('child OPS executor failures remain visible in parent completion even when the plugin uses isError=false',async t=>{
