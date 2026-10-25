@@ -17,16 +17,20 @@ test('creation-button policy follows the real native locale registry and scopes 
   try {
     const locale=new LocaleRuntime(ctx);
     locale.register('sidebar','en',{'session.new.label':'New session'});
+    locale.register('schedule.manager','en',{'panel':'Automations'});
     locale.register('workspace','en',{'workspace.add':'Add workspace','actions.newSession.aria':'New "session" in {name}'});
     locale.register('sidebar','zh',{'session.new.label':'新建会话'});
+    locale.register('schedule.manager','zh',{'panel':'自动化任务'});
     locale.register('workspace','zh',{'workspace.add':'添加工作区','actions.newSession.aria':'在{name}中新建会话'});
     const en=nativeCreationPolicyCss(locale);
     assert.match(en,/button\[aria-label="New session"\]/);
+    assert.ok(en.includes('button[aria-label="Automations"]'));
     assert.ok(en.includes('aria-label^="New \\"session\\" in "'));
     assert.ok(!en.includes('[aria-label$=""]'),'an empty CSS substring selector would hide no row buttons');
     locale.setLocale('zh');
     const zh=nativeCreationPolicyCss(locale);
     assert.ok(zh.includes('button[aria-label="添加工作区"]'));
+    assert.ok(zh.includes('button[aria-label="自动化任务"]'));
     assert.ok(zh.includes('[aria-label^="在"][aria-label$="中新建会话"]'));
     assert.ok(!zh.includes('New session'),'stale language labels must not govern native buttons');
   } finally { await ctx.fiber.dispose(); }

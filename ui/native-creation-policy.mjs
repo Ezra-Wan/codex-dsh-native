@@ -4,7 +4,7 @@
 const cssString = value => `"${String(value).replace(/[\x00-\x1f\x7f]/g, ' ').replaceAll('\\', '\\\\').replaceAll('"', '\\"')}"`;
 export function nativeCreationPolicyCss(locale) {
   const sidebar = locale.bind('sidebar'), workspace = locale.bind('workspace');
-  const names = [sidebar('session.new.label'), workspace('workspace.add')];
+  const names = [sidebar('session.new.label'), workspace('workspace.add'), locale.bind('schedule.manager')('panel')];
   const selectors = names.map(label => `#root button[aria-label=${cssString(label)}]`);
   const marker = '__CODEX_WORKSPACE_LABEL__';
   const pattern = workspace('actions.newSession.aria', { name: marker });
