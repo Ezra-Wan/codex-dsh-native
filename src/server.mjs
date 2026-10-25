@@ -87,6 +87,9 @@ if (arg) {
     title: 'DS 任务',
     _meta: { ui: { resourceUri } },
   });
+  add('ds_fallback','Hand off a failed native task to retained worker. A completed turn also needs explicit rejectionReason based on inspected artifacts: a protocol end is not artifact acceptance. Supply bounded remaining work and stable issue_id. Closes native runtime first; running/unknown/user-interrupted tasks are refused. Repeating returns the same fallback. Native conversation is retired. Worker does not inherit native output cap: omission uses its worker-policy warning; unsupported explicit cap fails before handoff.',{
+    agent_id:agent,task:z.string().min(1),issue_id:z.string().min(1).max(200),rejectionReason:z.string().min(1).max(2000).optional(),name:z.string().max(100).optional(),maxTokens:z.number().int().min(1024).max(32768).optional(),
+  },args=>bridge.fallback(args),{title:'DS worker 兜底',_meta:{ui:{resourceUri}}});
   add('ds_followup', 'Continue an idle task with the same backend, workspace and retained conversation. Native output cap is retained. Worker requires ds_review revise, obeys its correction cap, and retains worker_agent_id. Unknown acceptance cannot be replayed.', {
     agent_id: agent,
     task: z.string().min(1),

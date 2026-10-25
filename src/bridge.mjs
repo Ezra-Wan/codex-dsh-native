@@ -158,7 +158,7 @@ export class Bridge {
         maxTokens: cap, effort, permission, subagents, role, backend: 'native',
         ...(webEmbed ? { webEmbed: true, webPort: this.nextWebPort() } : {}),
         returnChars: MODES[mode].returnChars,
-        status: 'new', turn: 0, createdAt: new Date().toISOString(), persisted: false,
+        status: 'new', turn: 0, createdAt: new Date().toISOString(), persisted: false, runtimeMayExist: false,
       };
       return this.launch(record, task);
     });
@@ -193,6 +193,7 @@ export class Bridge {
       const current = this.live.get(id);
       if (current?.busy) throw new Error('Agent is busy. Wait or stop before followup.');
       const record = current?.record ?? await this.read(id);
+      if(record.fallbackReserved)throw new Error('This native task was retired for worker fallback; continue its fallback task instead.');
       await this.assertSessionQuiet(record);
       return this.launch(record, task);
     });
@@ -283,6 +284,7 @@ export class Bridge {
           record.runtimeGeneration = (record.runtimeGeneration ?? 0) + 1;
         }
         entry.runtime = this.runtimeFactory(record, { home: record.webEmbed ? await this.prepareTaskHome(record.agent_id) : this.home, patches, ...(record.webEmbed ? { profile: 'sdk-web' } : {}) });
+        record.runtimeMayExist=true;await this.save(record);
         await entry.runtime.start();
         if (record.persisted) await entry.runtime.resumeSession(record.session_id);
         else {
@@ -375,7 +377,7 @@ export class Bridge {
       record.error = errorText(error);
       // A dead transport must never be reused; native resume is the next path.
       if (entry.runtime) {
-        try { await entry.runtime.close(); entry.runtime = null; }
+        try { await entry.runtime.close(); entry.runtime = null;record.runtimeMayExist=false; }
         catch (cleanup) { record.error += `; cleanup: ${errorText(cleanup)}`; }
       }
       if (record.webEmbed) record.nativeUrl = null;
@@ -403,6 +405,7 @@ export class Bridge {
     return { agent_id, session_id, name, role: record.role ?? 'peer', backend: record.backend ?? 'native', ...(record.subagents ? { subagents: true } : {}), ...(record.webEmbed ? { nativeUrl: record.nativeUrl ?? null } : {}), mode, model, maxTokens, permission, cwd, turn, status, progress,
       ...(children.length ? { children } : {}),
       ...(record.userTakeover ? { userTakeover: record.userTakeover } : {}),
+      ...(record.fallbackReserved?{fallbackReserved:true,fallbackAgentId:record.fallbackAgentId??null}:{}),
       error,
       warnings: record.warnings ?? [],
       recentActions: (record.recentActions ?? []).slice(-6).map(action => ({ ...action, text: action.text?.slice(0, 600), truncated: action.truncated || action.text?.length > 600 })),
@@ -523,6 +526,28 @@ export class Bridge {
     });
   }
 
+  // Hold the native task's existing inter-process lock across handoff. A
+  // failed status alone does not prove that its SDK process has stopped.
+  async prepareFallback(id,{rejectionReason}={}) {
+    return this.admit(async()=>{
+      const entry=this.live.get(id);
+      if(entry?.busy&&entry.record.status==='failed')await entry.done;
+      if(entry?.busy)throw new Error('Native task may still be active; no worker task was sent.');
+      const snapshot=entry?.record??await this.read(id);
+      const eligible=record=>record.status==='failed'||(['completed','completed_with_warnings'].includes(record.status)&&rejectionReason?.trim());
+      if(!eligible(snapshot))throw new Error('Fallback requires a failed native task or explicit artifact-review rejection of a completed turn; active, unknown and user-interrupted tasks are refused.');
+      if(!entry&&snapshot.runtimeMayExist!==false)throw new Error('No saved proof of native runtime shutdown; inspect the previous process before handing off.');
+      if(entry)await this.release(id,{force:true});
+      const release=await this.claim(id);
+      try{
+        const record=await this.read(id);
+        if(!eligible(record))throw new Error('Native task state changed during fallback preparation');
+        record.fallbackReserved=true;record.fallbackReason=rejectionReason??record.error;await this.save(record);
+        return{record,release};
+      }catch(error){await release();throw error;}
+    });
+  }
+
   async release(id, { force = false } = {}) {
     const entry = this.live.get(id);
     if (!entry || entry.busy || (entry.viewCount && !force)) return;
@@ -533,6 +558,7 @@ export class Bridge {
     clearTimeout(entry.timer);
     if (entry.runtime) {
       await entry.runtime.close();
+      entry.record.runtimeMayExist=false;
       // The SDK's shutdown flush touches the native log after the turn ends.
       entry.record.lastSelfWriteAt = Date.now();
       await this.save(entry.record).catch(() => {});
