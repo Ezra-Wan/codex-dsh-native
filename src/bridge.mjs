@@ -278,6 +278,7 @@ export class Bridge {
 
   async execute(entry, task) {
     const record = entry.record;
+    const toolNames=new Map();
     try {
       if (!entry.runtime) {
         // Subagent tasks add the official delegation patch below global ones;
@@ -304,6 +305,16 @@ export class Bridge {
         onNotification: notification => {
           if (notification.method !== 'session.event') return;
           const { sessionId, event } = notification.params;
+          const action=visibleEvent(event);
+          if(action?.type==='tool/call')toolNames.set(`${sessionId}:${action.callId}`,action.name);
+          if(action?.type==='tool/result'){
+            const key=`${sessionId}:${action.callId}`,tool=toolNames.get(key);toolNames.delete(key);
+            // OPS can report executor failure in its rendered result while
+            // keeping native isError=false. Keep that report visible, including
+            // descendants; it must not disappear behind parent completed.
+            const reportedUnavailable=tool==='ops_bash'&&/^\[error: EXECUTOR_UNAVAILABLE:/m.test(action.text??'');
+            if(action.isError||reportedUnavailable)record.warnings.push({session_id:sessionId,seq:event.seq,callId:action.callId,tool,message:errorText(action.text)});
+          }
           // Native descendant sessions (subagents) are observed, never driven:
           // their ids live in record.children only, never as bridge agents.
           if (sessionId !== record.session_id) {
@@ -321,7 +332,6 @@ export class Bridge {
           if (entry.eventWaiters?.size) for (const wake of entry.eventWaiters) {
             try { wake(record.progress.eventCount); } catch { /* a waiter's own guard */ }
           }
-          const action = visibleEvent(event);
           // Bridge prompts exactly one kind=user message per turn (runtime.run);
           // extras beyond record.turn are the user driving this peer elsewhere.
           // record.userPrompts accumulates across turns; record.turn likewise.
@@ -331,9 +341,6 @@ export class Bridge {
           if (action) {
             record.recentActions.push(action);
             if (record.recentActions.length > 12) record.recentActions.shift();
-          }
-          if (event.type === 'tool/result' && event.data.message.isError) {
-            record.warnings.push({ seq: event.seq, callId: event.data.message.toolCallId, message: errorText(action?.text) });
           }
         },
       });
