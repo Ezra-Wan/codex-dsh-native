@@ -22,7 +22,7 @@ test('MCP initialization, tools and switch work over real stdio without model ca
   try {
     await client.connect(transport);
     const { tools } = await client.listTools();
-    assert.deepEqual(tools.map(tool => tool.name).sort(), ['ds_bridge', 'ds_events', 'ds_followup', 'ds_observe', 'ds_panel', 'ds_start', 'ds_stop', 'ds_wait']);
+    assert.deepEqual(tools.map(tool => tool.name).sort(), ['ds_bridge', 'ds_events', 'ds_followup', 'ds_observe', 'ds_panel', 'ds_review', 'ds_start', 'ds_stop', 'ds_wait']);
     const panel = tools.find(tool => tool.name === 'ds_panel');
     assert.deepEqual(panel._meta['openai/ui'].entrypoints, [{ type: 'thread' }]);
     // P0-A metadata: the dispatch call declares its task card. Note this is a

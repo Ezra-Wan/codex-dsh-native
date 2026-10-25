@@ -60,6 +60,12 @@ export function createCard({ app, doc = globalThis.document }) {
   function applyTaskBinding() {
     if (!selected) return false;
     const status = tasks.find(task => task.agent_id === selected);
+    if(status?.backend==='worker'){
+      withdrawBinding();
+      const heading=$('fallback').querySelector('.hint');
+      if(heading)heading.textContent='旧 worker 兜底：此载体仅显示状态，结果由 ds_wait 收取；不提供原生正文流。';
+      return true;
+    }
     const url = status?.nativeUrl ?? null;
     if (url) {
       mountOfficial(url);

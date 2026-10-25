@@ -4,12 +4,12 @@ import { z } from 'zod';
 import { NativeWebPeer } from './native-web-peer.mjs';
 import { nativeTaskBootstrap } from './native-task-bootstrap.mjs';
 
-export const NATIVE_TASK_URI = 'ui://dsh-native/task-v11.html';
+export const NATIVE_TASK_URI = 'ui://dsh-native/task-v12.html';
 const publicTask = ({ nativeUrl, ...task }) => ({ ...task, nativeViewAvailable: typeof nativeUrl === 'string' });
 
 // The same registration is used by the production switch and the isolated
 // zero-model fixture server. A view capability is private _meta, not model text.
-export function registerNativeTaskUi(server, { resolveTask, listTasks, retainView, peerFactory = url => new NativeWebPeer(url), onSignal = () => {}, diagnostics = false }) {
+export function registerNativeTaskUi(server, { resolveTask, listTasks, retainView, workerEvents, peerFactory = url => new NativeWebPeer(url), onSignal = () => {}, diagnostics = false }) {
   const views = new Map();
   const closeView = id => {
     const view = views.get(id);
@@ -44,6 +44,10 @@ export function registerNativeTaskUi(server, { resolveTask, listTasks, retainVie
   }));
   add('native_tasks', {}, async () => ({ items: (await listTasks()).map(publicTask) }));
   add('native_state', { agent_id: agent }, async ({ agent_id }) => publicTask(await resolveTask(agent_id, false)));
+  add('native_worker_events',{agent_id:agent,after:z.union([z.number().int().min(-1),z.string().max(2000)]).default(-1),limit:z.number().int().min(1).max(50).default(20)},async({agent_id,after,limit})=>{
+    if((await resolveTask(agent_id,false)).backend!=='worker'||!workerEvents)throw Error('This is not a worker-backed task');
+    return workerEvents(agent_id,after,limit);
+  });
   add('native_bootstrap', { agent_id: agent }, async ({ agent_id }) => {
     const task = await resolveTask(agent_id, true);
     if (!task.nativeUrl) throw new Error('This task has no live native view; continue the task to reopen its runtime');

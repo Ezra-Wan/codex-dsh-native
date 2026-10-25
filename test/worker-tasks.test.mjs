@@ -77,3 +77,9 @@ test('stopping a wrapped worker waits for its collector and does not interrupt a
   assert.equal((await tasks.status(b.agent_id)).status,'running');assert.deepEqual([...stopped],['remote-1']);
   assert.equal((await tasks.stop(b.agent_id)).status,'interrupted');
 });
+
+test('a read-only wait transport failure after acceptance cannot classify the paid task as not sent or failed',async t=>{
+  const worker={async startArguments(){},async start(){return{agent_id:'accepted'};},async wait(){throw Object.assign(Error('read transport lost'),{mayHaveRun:false});},async close(){},async stop(){throw Error('unreachable');}};
+  const {tasks,args}=await setup(t,{worker});const receipt=await tasks.start(args);await tasks.entries.get(receipt.agent_id).done;
+  const record=await tasks.read(receipt.agent_id);assert.equal(record.status,'unknown');assert.equal(record.submission,'acknowledged');assert.equal(record.workerAgentId,'accepted');
+});

@@ -89,8 +89,9 @@ export class WorkerTasks {
       }catch(error){
         record.error=safe(error);
         // Only explicit preflight errors prove that no mutation was sent.
-        record.status=error.mayHaveRun===false?'failed':'unknown';
-        record.submission=error.mayHaveRun===false?'not_sent':'uncertain';
+        const notSent=!record.workerAgentId&&error.mayHaveRun===false;
+        record.status=notSent?'failed':'unknown';
+        record.submission=notSent?'not_sent':record.submission==='acknowledged'?'acknowledged':'uncertain';
         await this.save(record);
       }
     })().catch(error=>{entry.record.status='unknown';entry.record.error=safe(error);}).finally(()=>{entry.busy=false;});
