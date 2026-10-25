@@ -92,7 +92,7 @@ export class WorkerMcpClient {
   followup(agent_id,task) { return this.call('dsh_followup',{agent_id,task},{mutating:true}); }
   stop(agent_id) { return this.call('dsh_interrupt',{agent_id},{timeout:60000,mutating:true}); }
   review(agent_id,verdict,feedback) { return this.call('dsh_review',{agent_id,verdict,feedback},{mutating:true}); }
-  events(agent_id,after=0,limit=30) { return this.call('dsh_events',{agent_id,after:after===-1?0:after,limit,max_chars:12000,include_progress:true,include_tool_events:true,include_descendants:true}); }
+  events(agent_id,after=0,limit=30) { return this.call('dsh_events',{agent_id,after:after===-1?0:after,limit,max_chars:12000,include_progress:false,include_tool_events:true,include_descendants:true}); }
   find(marker) { return this.call('dsh_list',{match:marker,limit:100,max_chars:50000}); }
   async close() { this.closed=true; await this.connecting?.catch(()=>{}); await this.connection?.client.close(); this.connection=null; }
 }
