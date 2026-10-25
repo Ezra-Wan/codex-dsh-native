@@ -88,9 +88,9 @@ test('initialization mounts the official UI and starts the observation loop', as
   assert.equal(waits.length, 1);
   assert.equal(waits[0].args.agent_id, 'aaaaaaaa-0000-0000-0000-000000000001');
   // A wait result applies the status to the badge without any wiring error.
-  app.pendingWaits[0].resolve({ structuredContent: { status: 'running', recentActions: [] } });
+  app.pendingWaits[0].resolve({ structuredContent: { status: 'unknown', failure:{kind:'network_unavailable',label:'疑似本机断网（无可用网络接口）'}, recentActions: [] } });
   await new Promise(resolve => setImmediate(resolve));
-  assert.match(doc.byId.get('state').textContent, /运行中/);
+  assert.match(doc.byId.get('state').textContent, /疑似本机断网/);
   card.core.stop();
 });
 

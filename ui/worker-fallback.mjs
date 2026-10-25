@@ -4,7 +4,7 @@ export function mountWorkerFallback({doc,call,task}){
   const panel=doc.getElementById('worker-fallback'),state=doc.getElementById('worker-state'),answer=doc.getElementById('worker-answer'),events=doc.getElementById('worker-events');
   let disposed=false,busy=false,cursor=-1,lines=[];
   panel.hidden=false;
-  const update=value=>{state.textContent=`${value.name||'Worker'} · ${value.status}\nworker_agent_id: ${value.worker_agent_id??'等待回执'}\n${value.error??''}\n${(value.warnings??[]).join('\n')}`;answer.textContent=value.final??'';};
+  const update=value=>{state.textContent=`${value.name||'Worker'} · ${value.status}\nworker_agent_id: ${value.worker_agent_id??'等待回执'}\n${value.failure?.label??''}\n${value.error??''}\n${(value.warnings??[]).join('\n')}`;answer.textContent=value.final??'';};
   update(task);
   const poll=async()=>{
     if(disposed||busy||doc.hidden)return;busy=true;

@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { createRuntime, writeExecutionPatch, writeSubagentPatch, writeWebEmbedPatch } from './runtime.mjs';
 import { visibleEvent, readNativeEvents } from './trace.mjs';
 import {assertOpsInstalled,writeOpsPatch,opsProfile} from './ops.mjs';
+import {classifyFailure,localNetworkSnapshot} from './failure.mjs';
 
 export const MODES = Object.freeze({
   light: { maxTokens: 8192, returnChars: 4000 },
@@ -31,11 +32,12 @@ function alive(pid) {
 }
 
 export class Bridge {
-  constructor({ root, runtimeFactory = createRuntime, idleMs = 120_000, maxParallel = 2, patches = [], webEmbedBasePort = 8800 }) {
+  constructor({ root, runtimeFactory = createRuntime, idleMs = 120_000, maxParallel = 2, patches = [], webEmbedBasePort = 8800, networkSnapshot = localNetworkSnapshot }) {
     this.root = resolve(root);
     this.home = join(this.root, 'dsh-home');
     this.tasks = join(this.root, 'tasks');
     this.runtimeFactory = runtimeFactory;
+    this.networkSnapshot = networkSnapshot;
     this.idleMs = idleMs;
     this.maxParallel = checkParallel(maxParallel);
     this.patches = patches;
@@ -116,7 +118,12 @@ export class Bridge {
   async read(id) {
     const record=await readJson(this.path(id));
     if(record.agent_id!==id)throw new Error('Task identity does not match its state path');
-    return record.stateRecoveredFromBackup?{...record,status:'unknown',nativeUrl:null,error:'Task state recovered from backup; inspect runtime and native history before resuming.'}:record;
+    if(record.stateRecoveredFromBackup)return {...record,status:'unknown',nativeUrl:null,error:'Task state recovered from backup; inspect runtime and native history before resuming.'};
+    if(ACTIVE.has(record.status)&&!this.live.has(id)){
+      const owner=await readFile(join(this.tasks,`${id}.lock`,'owner.json'),'utf8').then(JSON.parse).catch(()=>null);
+      if(!owner||!alive(owner.pid))return {...record,status:'unknown',nativeUrl:null,failure:classifyFailure(null,{stage:'controller'}),error:'原控制器已失联；尚未确认任务停止。先检查原生会话日志和运行时，不要重发任务。'};
+    }
+    return record;
   }
   async save(record) { await atomicJson(this.path(record.agent_id), record); }
 
@@ -255,9 +262,10 @@ export class Bridge {
     }
     clearTimeout(entry.timer);
     entry.cancel = false;
+    entry.cancelSource = null;
     Object.assign(record, {
       status: 'starting', turn: record.turn + 1, updatedAt: new Date().toISOString(),
-      error: null, final: '', finishReason: null, usage: null, progress: { eventCount: 0 }, warnings: [], recentActions: [],
+      error: null, failure: null, final: '', finishReason: null, usage: null, progress: { eventCount: 0 }, warnings: [], recentActions: [],
       // A continuation resumes the same native conversation. Keep descendant
       // identities available for historical inspection across parent turns.
       children: record.children ?? {}, userTakeover: null,
@@ -368,6 +376,7 @@ export class Bridge {
       record.status = interrupted ? 'interrupted' : record.finishReason === 'completed' && record.final ? 'completed' : 'failed';
       if (record.status !== 'completed') record.error = errorText(turnEnd?.data?.reason?.error?.message ?? `Native turn ended: ${record.finishReason}`);
       if (record.finishReason === 'max-tokens') record.error = 'Output cap reached; partial answer is not accepted as complete.';
+      if(record.status!=='completed')record.failure=classifyFailure(turnEnd?.data?.reason?.error??record.error,{stage:'provider',stopSource:entry.cancelSource,finishReason:record.finishReason,networkSnapshot:this.networkSnapshot});
       if (!record.final && !record.error) record.error = 'Native session returned no final assistant text.';
       if (record.status === 'completed' && record.warnings.length) record.status = 'completed_with_warnings';
       const resultPath = join(this.tasks, `${record.agent_id}.turn-${record.turn}.txt`);
@@ -376,10 +385,11 @@ export class Bridge {
     } catch (error) {
       record.status = entry.cancel ? 'interrupted' : 'failed';
       record.error = errorText(error);
+      record.failure=classifyFailure(error,{stage:'native_transport',stopSource:entry.cancelSource,networkSnapshot:this.networkSnapshot});
       // A dead transport must never be reused; native resume is the next path.
       if (entry.runtime) {
         try { await entry.runtime.close(); entry.runtime = null;record.runtimeMayExist=false; }
-        catch (cleanup) { record.error += `; cleanup: ${errorText(cleanup)}`; }
+        catch (cleanup) { record.status='unknown';record.error += `; cleanup: ${errorText(cleanup)}`; }
       }
       if (record.webEmbed) record.nativeUrl = null;
     } finally {
@@ -454,6 +464,7 @@ export class Bridge {
       ...(record.fallbackReserved?{fallbackReserved:true,fallbackAgentId:record.fallbackAgentId??null}:{}),
       ...(record.webEmbed&&record.persisted&&!record.fallbackReserved?{nativeViewRestorable:true}:{}),
       ops:record.ops??'off',
+      ...(record.failure?{failure:record.failure}:{}),
       error,
       warnings: record.warnings ?? [],
       recentActions: (record.recentActions ?? []).slice(-6).map(action => ({ ...action, text: action.text?.slice(0, 600), truncated: action.truncated || action.text?.length > 600 })),
@@ -499,12 +510,6 @@ export class Bridge {
     const entry = this.live.get(id);
     if (entry) return this.summary(entry.record);
     const record = await this.read(id);
-    if (ACTIVE.has(record.status)) {
-      const owner = await readFile(join(this.tasks, `${id}.lock`, 'owner.json'), 'utf8').then(JSON.parse).catch(() => null);
-      if (!owner || !alive(owner.pid)) {
-        return { ...this.summary(record), status: 'interrupted', error: 'Previous bridge process ended. Use followup to resume native history.' };
-      }
-    }
     return this.summary(record);
   }
 
@@ -535,7 +540,7 @@ export class Bridge {
     return this.status(id);
   }
 
-  async stop(id) {
+  async stop(id, {source='caller'}={}) {
     return this.admit(async () => {
       const entry = this.live.get(id);
       if (!entry) return this.status(id);
@@ -544,6 +549,7 @@ export class Bridge {
         return this.status(id);
       }
       entry.cancel = true;
+      entry.cancelSource = source;
       entry.interrupt?.();
       entry.record.status = 'stopping';
       // SDK has no mid-turn cancel method. Closing this task's runtime does not affect other tasks.
@@ -668,7 +674,7 @@ export class Bridge {
     await this.admission;
     await Promise.all([...this.live.keys()].map(async id => {
       const entry = this.live.get(id);
-      if (entry.busy) await this.stop(id);
+      if (entry.busy) await this.stop(id,{source:'controller_shutdown'});
       await this.release(id, { force: true });
     }));
   }
