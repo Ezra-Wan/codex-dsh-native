@@ -1,5 +1,6 @@
 import { fileURLToPath } from 'node:url';
-import { readFile } from 'node:fs/promises';
+import { readFile, mkdir, appendFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
@@ -13,6 +14,7 @@ if (!Number.isInteger(webEmbedBasePort) || webEmbedBasePort < 1024 || webEmbedBa
 }
 const bridge = await new Bridge({ root, webEmbedBasePort }).init();
 const nativeMcpUi = process.env.CODEX_DSH_UI === 'mcp';
+const uiDiagnostics = process.env.CODEX_DSH_UI_DIAGNOSTICS === 'on';
 const arg = process.argv[2];
 if (arg) {
   if (arg === '--enable' || arg === '--disable') console.log(JSON.stringify(await bridge.setEnabled(arg === '--enable')));
@@ -33,6 +35,13 @@ if (arg) {
   const agent = z.string().uuid().describe('Retain the ID returned by ds_start; followups reuse it.');
   const resourceUri = nativeMcpUi ? NATIVE_TASK_URI : 'ui://dsh-native/observer.html';
   const nativeUi = nativeMcpUi ? registerNativeTaskUi(server, {
+    diagnostics: uiDiagnostics,
+    onSignal: async args => {
+      if (!uiDiagnostics) return;
+      const dir = join(root, 'review');
+      await mkdir(dir, { recursive: true });
+      await appendFile(join(dir, 'native-ui-evidence.jsonl'), JSON.stringify({ ...args, at: new Date().toISOString() }) + '\n');
+    },
     resolveTask: bridgeTaskResolver(bridge),
     retainView: id => bridge.retainView(id),
     listTasks: async () => (await bridge.list()).items,

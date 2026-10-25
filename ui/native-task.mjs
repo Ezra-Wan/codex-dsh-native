@@ -6,6 +6,7 @@ import { registerSessionTarget } from './native-session-target.mjs';
 import { splitNativeFonts, installNativeFonts } from './native-fonts.mjs';
 import { createNativeTaskLayout } from './native-task-layout.mjs';
 import { createNativeDisplayMode, registerNativePresentation } from './native-presentation.mjs';
+import { observeNativeRendering } from './native-render-evidence.mjs';
 
 const app = new App({ name: 'DSH native task', version: '1' }, { availableDisplayModes: ['inline', 'fullscreen'] }, { autoResize: false });
 const root = document.getElementById('root'), status = document.getElementById('state'), tasks = document.getElementById('tasks');
@@ -65,7 +66,9 @@ const controller = createNativeTaskController({ call: rawCall,
     root.style.visibility = 'visible'; status.textContent = `${task.name || 'DSH'} · ${task.role === 'sub' ? '派生任务' : '协作工作区'} · ${task.status}`;
     layout.restore(task.presentation); layout.mounted();
     void signal('native-view-mounted', task.session_id);
-    return { async dispose() { try { await entry.dispose(); } finally { rpc.dispose(); } } };
+    const stopEvidence = bootstrap.diagnostics ? observeNativeRendering(root, { mode: nativeMode,
+      signal: (event, detail) => signal(event, JSON.stringify({ agent_id: task.agent_id, viewId, sample: JSON.parse(detail) })) }) : () => {};
+    return { async dispose() { stopEvidence(); try { await entry.dispose(); } finally { rpc.dispose(); } } };
   },
 });
 

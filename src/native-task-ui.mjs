@@ -9,7 +9,7 @@ const publicTask = ({ nativeUrl, ...task }) => ({ ...task, nativeViewAvailable: 
 
 // The same registration is used by the production switch and the isolated
 // zero-model fixture server. A view capability is private _meta, not model text.
-export function registerNativeTaskUi(server, { resolveTask, listTasks, retainView, peerFactory = url => new NativeWebPeer(url), onSignal = () => {} }) {
+export function registerNativeTaskUi(server, { resolveTask, listTasks, retainView, peerFactory = url => new NativeWebPeer(url), onSignal = () => {}, diagnostics = false }) {
   const views = new Map();
   const presentation = new Map();
   const presentedTask = task => ({ ...publicTask(task), presentation: presentation.get(task.agent_id) ?? { collapsed: false, revision: 0 } });
@@ -60,6 +60,7 @@ export function registerNativeTaskUi(server, { resolveTask, listTasks, retainVie
     try {
       peer = peerFactory(task.nativeUrl);
       const bootstrap = await nativeTaskBootstrap(peer);
+      if (diagnostics) bootstrap.diagnostics = true;
       const id = randomUUID();
       views.set(id, { peer, release, agentId: agent_id, url: task.nativeUrl, generation: task.runtimeGeneration, touched: Date.now() });
       return { viewId: id, task: presentedTask(task), bootstrap };
