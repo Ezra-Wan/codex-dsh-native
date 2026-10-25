@@ -60,7 +60,7 @@ if (arg) {
     if (enabled !== undefined) await bridge.setEnabled(enabled);
     return bridge.list();
   });
-  add('ds_start', 'Start an independent native DeepSeek Harness task asynchronously. Both modes retain native tools, workspace, history and automatic compaction. light defaults to 8192 output tokens/request; coding to 32768. These are not context-window or total-spend limits. Return immediately, continue independent parent work, then collect with ds_wait. Do not use for work outside the user-authorized scope. role: peer works a copied workspace (git worktree of the parent repo) and may later be driven by the user in the native web UI; role: sub marks a derived X__<task> workspace whose session may spawn native subagents (subagents: true mounts the official delegation tool; children are observable via ds_events using their session ids but can never be followed up directly). backend: native (default) runs here; backend: worker returns an explicit failover directive to dispatch through the retained deepseek_worker MCP instead — choose it only when this executor cannot take the work, and never rerun a status-unknown native task on the worker without checking it first.', {
+  add('ds_start', 'Start an independent native DeepSeek Harness task asynchronously. Both modes retain native tools, workspace, history and automatic compaction. Caller chooses an explicit maxTokens for a bounded task when appropriate; light defaults to 8192 output tokens/request, coding to 32768. These are not context-window or total-spend limits. Return immediately, continue independent parent work, then collect with ds_wait. Do not use outside the user-authorized scope. Caller must prepare the existing cwd and separate worktrees for concurrent writers: the bridge never creates or merges a worktree. role: peer or sub is an organizational label, not proof of a copied workspace or native parent/child lineage. subagents:true separately mounts the official DSH delegation tool; actual native children appear in children and are observable through ds_events, never directly driven through ds_followup. User takeover authorization is not implemented; the task UI hides ordinary message input. backend:native runs here; backend:worker returns a manual failover directive for the retained deepseek_worker MCP, not an integrated adapter. Never rerun a status-unknown native task without checking its status.', {
     task: z.string().min(1).describe('Self-contained bounded task, artifacts to produce, verification and concise final delivery.'),
     cwd: z.string().min(1).describe('Absolute task workspace; separate worktree for concurrent code writers.'),
     name: z.string().max(100).optional(),
@@ -73,7 +73,7 @@ if (arg) {
     model: z.string().optional(),
     provider: z.string().optional(),
     effort: z.string().optional(),
-    maxTokens: z.number().int().min(1024).max(32768).optional(),
+    maxTokens: z.number().int().min(1024).max(32768).optional().describe('Caller-selected per-request output cap, 1024..32768. Choose to fit the bounded task; omission uses the mode preset. Existing followups retain this cap. Not a total task budget.'),
   }, args => bridge.start(args), {
     // P0-A single entry: the dispatch call itself renders the task card, so
     // one dsh-xxx row owns the whole task lifecycle; collection and
@@ -99,7 +99,9 @@ if (arg) {
   }, ({ agent_id, after_seq, limit }) => bridge.events(agent_id, after_seq, limit), {
     annotations: { readOnlyHint: true }, _meta: { ui: { visibility: ['model', 'app'] } },
   });
-  add('ds_observe', 'Show one DSH task in the conversation: the card is a container for the OFFICIAL native web UI (same implementation as the desktop app), embedding it via the local native-replay adapter. The fallback panel lists tasks and status when embedding is unavailable. The view itself reads official session storage; it never calls the model.', {
+  add('ds_observe', nativeMcpUi
+    ? 'Attach the original DSH frontend to one existing task using the MCP carrier. Exact native session navigation and the executing runtime own the live body; opening the view sends no model prompt. Ordinary user message input is hidden. Use only to attach a missing/old task card, not as a second progress entry.'
+    : 'Attach the legacy official-Web iframe card to an existing task. It requires an available per-task URL or explicitly enabled legacy replay; the host may block loopback frames. Prefer the MCP native UI switch on verified hosts. Opening the view sends no model prompt.', {
     agent_id: agent,
   }, ({ agent_id }) => bridge.status(agent_id), {
     title: '查看 DS 执行过程', annotations: { readOnlyHint: true }, _meta: { ui: { resourceUri } },
