@@ -35,6 +35,26 @@ export class TaskRouter {
     if(!await this.worker.has(id))throw Error('ds_review applies to worker deliveries; native deliveries require artifact review by the caller, not a simulated worker ledger.');
     return this.worker.review(id,verdict,feedback);
   }
+  fallback({agent_id,task,issue_id,name,maxTokens,rejectionReason}){return this.serial(async()=>{
+    if(this.closing||!(await this.native.config()).enabled)throw Error('Bridge is closed or disabled');
+    if(await this.worker.has(agent_id))throw Error('Fallback source must be a native task');
+    const source=await this.native.status(agent_id);
+    if(source.status!=='failed'&&!(['completed','completed_with_warnings'].includes(source.status)&&rejectionReason?.trim()))throw Error('Only a failed native task or completed delivery explicitly rejected by artifact review can be handed off; unknown or active work must be inspected first.');
+    // Preflight before retiring the native conversation. The old worker owns
+    // its budget policy; explicit unsupported caps still fail before handoff.
+    await this.worker.worker.startArguments({task,cwd:source.cwd,issue_id,permission:source.permission,...(maxTokens!==undefined?{maxTokens}:{})});
+    const held=await this.native.prepareFallback(agent_id,{rejectionReason});
+    try{
+      const previous=(await this.worker.list()).filter(item=>item.source_agent_id===agent_id);
+      if(previous.length>1)throw Error('Multiple fallback records found; inspect rather than dispatch again');
+      if(previous.length)return this.worker.status(previous[0].agent_id);
+      const args={task,cwd:source.cwd,permission:source.permission,mode:source.mode,role:source.role,issue_id,name:name??`${source.name||'DSH'} worker fallback`,maxTokens,source_agent_id:agent_id};
+      await this.guardWriter(args,agent_id);
+      const result=await this.worker.start(args);
+      held.record.fallbackAgentId=result.agent_id;await this.native.save(held.record);
+      return result;
+    }finally{await held.release();}
+  });}
   async resolveTask(id,wait=false){return await this.worker.has(id)?this.worker.status(id):this.resolveNative(id,wait);}
   async close(){this.closing=true;await this.gate;const worker=await this.worker.close();await this.native.close();return worker;}
 }
