@@ -7,6 +7,7 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { createRuntime, writeExecutionPatch, writeSubagentPatch, writeWebEmbedPatch } from './runtime.mjs';
 import { visibleEvent, readNativeEvents } from './trace.mjs';
+import {assertOpsInstalled,writeOpsPatch,opsProfile} from './ops.mjs';
 
 export const MODES = Object.freeze({
   light: { maxTokens: 8192, returnChars: 4000 },
@@ -141,7 +142,7 @@ export class Bridge {
     return result;
   }
 
-  async start({ task, cwd, mode = 'light', name = '', model = 'deepseek-v4-flash', provider = 'deepseek-official', maxTokens, effort, permission = 'workspace-write', subagents = false, role = 'peer', backend = 'native', webEmbed = true }) {
+  async start({ task, cwd, mode = 'light', name = '', model = 'deepseek-v4-flash', provider = 'deepseek-official', maxTokens, effort, permission = 'workspace-write', subagents = false, role = 'peer', backend = 'native', webEmbed = true,ops='off' }) {
     return this.admit(async () => {
       if (!isAbsolute(cwd) || !(await stat(cwd)).isDirectory()) throw new Error('cwd must be an existing absolute directory');
       if (!MODES[mode]) throw new Error('mode must be light or coding');
@@ -149,6 +150,8 @@ export class Bridge {
       if (typeof subagents !== 'boolean') throw new Error('subagents must be boolean');
       if (!['sub', 'peer'].includes(role)) throw new Error('role must be sub or peer');
       if (!['native', 'worker'].includes(backend)) throw new Error('backend must be native or worker');
+      if(!['off','files','full'].includes(ops))throw new Error('ops must be off, files or full');
+      if(backend==='worker'&&ops!=='off')throw new Error('OPS is configured per native profile; this worker has no verified OPS support');
       // worker backend is an explicit failover marker: execution goes through
       // the retained deepseek_worker MCP, not this bridge. Record it so task
       // directories and summaries never mix backends silently.
@@ -158,10 +161,11 @@ export class Bridge {
       }
       const cap = maxTokens ?? MODES[mode].maxTokens;
       if (!Number.isInteger(cap) || cap < 1024 || cap > 32768) throw new Error('maxTokens must be 1024..32768');
+      if(ops!=='off')await assertOpsInstalled(this.homeProfilesRoot(),webEmbed);
       const id = randomUUID();
       const record = {
         agent_id: id, session_id: id, name, cwd: resolve(cwd), mode, model, provider,
-        maxTokens: cap, effort, permission, subagents, role, backend: 'native',
+        maxTokens: cap, effort, permission, subagents, role, backend: 'native',ops,
         ...(webEmbed ? { webEmbed: true, webPort: this.nextWebPort() } : {}),
         returnChars: MODES[mode].returnChars,
         status: 'new', turn: 0, createdAt: new Date().toISOString(), persisted: false, runtimeMayExist: false,
@@ -384,14 +388,17 @@ export class Bridge {
 
   async prepareRuntime(entry){
     const record=entry.record;
+    const useOps=record.ops&&record.ops!=='off';
+    if(useOps)await assertOpsInstalled(this.homeProfilesRoot(),!!record.webEmbed);
     let patches=[...this.patches,await writeExecutionPatch(this.root,{webEmbed:!!record.webEmbed,subagents:!!record.subagents})];
+    if(useOps)patches.push(await writeOpsPatch(this.root,record.ops));
     if(record.subagents)patches.push(await writeSubagentPatch(this.root));
     if(record.webEmbed){
       const urlFile=join(this.root,'task-urls',`${record.webPort}.json`);await rm(urlFile,{force:true});
       patches.push(await writeWebEmbedPatch(this.root,{port:record.webPort,urlFile}));
       record.webUrlFile=urlFile;record.runtimeGeneration=(record.runtimeGeneration??0)+1;record.nativeUrl=null;
     }
-    entry.runtime=this.runtimeFactory(record,{home:record.webEmbed?await this.prepareTaskHome(record.agent_id):this.home,patches,...(record.webEmbed?{profile:'sdk-web'}:{})});
+    entry.runtime=this.runtimeFactory(record,{home:record.webEmbed?await this.prepareTaskHome(record.agent_id):this.home,patches,...(useOps?{profile:opsProfile(!!record.webEmbed)}:record.webEmbed?{profile:'sdk-web'}:{})});
     record.runtimeMayExist=true;await this.save(record);await entry.runtime.start();
     if(record.persisted)await entry.runtime.resumeSession(record.session_id);
     else{await entry.runtime.session(record.session_id).getWorkingDirectory();record.persisted=true;}
@@ -437,6 +444,7 @@ export class Bridge {
       ...(record.userTakeover ? { userTakeover: record.userTakeover } : {}),
       ...(record.fallbackReserved?{fallbackReserved:true,fallbackAgentId:record.fallbackAgentId??null}:{}),
       ...(record.webEmbed&&record.persisted&&!record.fallbackReserved?{nativeViewRestorable:true}:{}),
+      ops:record.ops??'off',
       error,
       warnings: record.warnings ?? [],
       recentActions: (record.recentActions ?? []).slice(-6).map(action => ({ ...action, text: action.text?.slice(0, 600), truncated: action.truncated || action.text?.length > 600 })),

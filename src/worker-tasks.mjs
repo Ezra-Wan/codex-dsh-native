@@ -63,6 +63,7 @@ export class WorkerTasks {
     const mode=args.mode??'light',permission=args.permission??'workspace-write',role=args.role??'peer';
     if(!MODES[mode]||!['read-only','workspace-write'].includes(permission)||!['peer','sub'].includes(role))throw Error('Invalid worker task options');
     if(args.subagents)throw Error('This worker interface cannot promise native subagents; no task was sent');
+    if(args.ops&&args.ops!=='off')throw Error('This retained worker has no verified OPS profile; no task was sent');
     const id=randomUUID(),marker=`dsh-${id}`,remoteArgs={task:args.task,cwd:resolve(args.cwd),name:`${marker} ${(args.name??'worker fallback').slice(0,65)}`,
       issue_id:args.issue_id.trim(),permission,...Object.fromEntries(['model','provider','effort','maxTokens'].filter(key=>args[key]!==undefined).map(key=>[key,args[key]]))};
     // Capability validation and connection happen BEFORE any local reservation
@@ -72,6 +73,7 @@ export class WorkerTasks {
       issue_id:remoteArgs.issue_id,marker,model:args.model??null,maxTokens:args.maxTokens??null,returnChars:MODES[mode].returnChars,
       status:'starting',submission:'prepared',turn:1,createdAt:new Date().toISOString(),
       warnings:['Worker fallback uses the retained worker harness. Native MCP body streaming is unavailable on this backend.',
+        'Native profile plugins are not inherited by this worker backend.',
         ...(!args.maxTokens?['Per-task output cap is owned by the worker policy, not the native light/coding preset.']:[])],
       ...(args.source_agent_id?{source_agent_id:args.source_agent_id}:{})};
     const entry=await this.own(record);await this.save(record);

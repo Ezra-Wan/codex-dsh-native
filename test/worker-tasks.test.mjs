@@ -17,6 +17,7 @@ async function setup(t,{extra='',worker}={}){
 
 test('worker wrapper completes, persists full answer, and cold continuation retains identity and real review contract',async t=>{
   const {tasks,args,root,configPath}=await setup(t);
+  await assert.rejects(tasks.start({...args,ops:'full'}),/no verified OPS/);
   await assert.rejects(tasks.start({...args,maxTokens:1024}),/maxTokens/);
   const receipt=await tasks.start(args),first=await tasks.wait(receipt.agent_id,5000);
   assert.equal(first.status,'completed');assert.equal(first.final,'WORKER_OK');assert.notEqual(first.agent_id,first.worker_agent_id);

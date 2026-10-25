@@ -23,7 +23,8 @@ export async function prepareOpsProfiles({home,opsSource}={}){
     await mkdir(dir,{recursive:true});
     const core=['@deepseek-ai/dsh-base','@deepseek-ai/dsh-sdk-app',...(web?['@deepseek-ai/dsh-web-app']:[])];
     const manifest={name,private:true,type:'module',codexDshOpsProfile:1,dsh:{profile:{bundles:[...core,'dsh-ops']}},
-      dependencies:{...Object.fromEntries(core.map(pkg=>[pkg,'0.2.1-rc.2'])),'dsh-ops':opsSource?`link:${opsSource.replaceAll('\\','/')}`:OPS_VERSION,...(web?{'@codex-dsh/web-embed':'link:./web-embed'}:{})},
+      dependencies:{...Object.fromEntries(core.map(pkg=>[pkg,'0.2.1-rc.2'])),'dsh-ops':opsSource?`link:${opsSource.replaceAll('\\','/')}`:OPS_VERSION,
+        ...(!opsSource?{'@dsh-ops/bash-win32-x64':'0.2.1'}:{}),...(web?{'@codex-dsh/web-embed':'link:./web-embed'}:{})},
       allowScripts:{'@deepseek-ai/dsh-subprocess-local@0.2.1-rc.2':true,'koffi@3.1.1':true,'node-pty@1.2.0-beta.15':true,'protobufjs@7.6.6':true}};
     if(web)await cp(join(project,'adapter','web-embed'),join(dir,'web-embed'),{recursive:true});
     await atomicJson(join(dir,'package.json'),manifest);

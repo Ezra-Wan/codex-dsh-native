@@ -4,6 +4,7 @@ import { mkdtemp, rm, mkdir, readFile, writeFile, utimes } from 'node:fs/promise
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Bridge } from '../src/bridge.mjs';
+import {prepareOpsProfiles} from '../scripts/init-ops-profiles.mjs';
 
 function factory() {
   const histories = new Map();
@@ -259,6 +260,21 @@ test('plain SDK tasks keep native execution and explicitly disable optional dele
   assert.equal(runtime.patches.length,1);
   const patch=await readFile(runtime.patches[0],'utf8');assert.match(patch,/tool-subagent\n  disabled: true/);assert.doesNotMatch(patch,/id: tool-fs\n/);
   runtime.finish();
+});
+
+test('OPS fails before dispatch when absent, uses its separate profile when enabled, and retains the choice on cold continuation',async t=>{
+  const {root,bridge,fake}=await setup(t);await bridge.setEnabled(true);
+  await assert.rejects(bridge.start({cwd:root,task:'not dispatched',ops:'files',webEmbed:false}),/OPS profile is unavailable/);assert.equal(fake.instances.length,0);
+  for(const dir of await prepareOpsProfiles({home:bridge.home})){
+    const module=join(dir,'node_modules','dsh-ops');await mkdir(module,{recursive:true});await writeFile(join(module,'package.json'),JSON.stringify({name:'dsh-ops',version:'0.3.0'}));
+  }
+  const first=await bridge.start({cwd:root,task:'use files',ops:'files',webEmbed:false,maxTokens:1024});const runtime=await ready(fake);
+  assert.equal(runtime.options.profile,'sdk-ops');
+  const patches=await Promise.all(runtime.patches.map(p=>readFile(p,'utf8')));assert.ok(patches.some(p=>/dsh-ops-shell\n  disabled: true/.test(p)&&/dsh-ops-file\n  disabled: false/.test(p)));
+  runtime.finish();await bridge.wait(first.agent_id);await bridge.close();
+  const cold=await new Bridge({root,runtimeFactory:fake.create}).init();t.after(()=>cold.close());
+  const resumed=await cold.followup(first.agent_id,'same plugins');assert.equal(resumed.ops,'files');assert.equal(resumed.maxTokens,1024);
+  (await ready(fake,1)).finish();await cold.wait(first.agent_id);
 });
 
 test('descendant session events land in children, not as bridge agents', async t => {
