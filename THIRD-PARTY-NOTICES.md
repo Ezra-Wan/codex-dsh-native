@@ -20,3 +20,10 @@ Installed dependencies retain their own licenses and notices. This file records 
 - Adaptation: `ui/native-session-target.mjs` retains the loader/injected native navigation approach, selects an existing precise SessionTarget, and removes workspace/session creation and HTTP polling.
 
 CodexHost's execution flow informed the design; no CodexHost source or diagram asset is copied. The current LGPL release is not included in the distribution.
+
+## Optional Codex Whale desktop companion
+
+- Upstream: https://github.com/Yang-huai406/Codex-Whale-Public
+- Pinned revision: `4a7ec1240de82527f2222b4af5202fa7b2ad731b`, package `0.4.1`.
+- MIT, copyright (c) 2026 MeteorNOX. The explicit preparation script copies the original LICENSE, PROVENANCE.md and THIRD_PARTY_NOTICES.md alongside the upstream runtime into the selected isolated local directory; upstream code is not vendored in this repository.
+- Adaptations: the Windows selector requires one explicit Codex root PID, and a small persistent balance strip consumes the original whale balance service. No upstream desktop autostart, Codex plugin registration or model call is performed by preparation. Electron retains its own packaged licenses/notices.
