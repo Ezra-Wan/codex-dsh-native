@@ -11,9 +11,9 @@ import { registerNativeTaskUi, NATIVE_TASK_URI, NATIVE_PEER_URI } from './native
 import { conversationIdentity, tasksInConversation } from './call-observation.mjs';
 
 const root = process.env.CODEX_DSH_BRIDGE_HOME ?? fileURLToPath(new URL('../.local/', import.meta.url));
-const webEmbedBasePort = Number(process.env.CODEX_DSH_WEB_BASE_PORT ?? 8800);
-if (!Number.isInteger(webEmbedBasePort) || webEmbedBasePort < 1024 || webEmbedBasePort > 65533) {
-  throw new Error('CODEX_DSH_WEB_BASE_PORT must be an integer between 1024 and 65533.');
+const webEmbedBasePort = Number(process.env.CODEX_DSH_WEB_BASE_PORT ?? 0);
+if (!Number.isInteger(webEmbedBasePort) || (webEmbedBasePort!==0&&(webEmbedBasePort < 1024 || webEmbedBasePort > 65533))) {
+  throw new Error('CODEX_DSH_WEB_BASE_PORT must be 0 (OS assigned) or an integer between 1024 and 65533.');
 }
 const nativeBridge = await new Bridge({ root, webEmbedBasePort }).init();
 const worker = await new WorkerTasks({ root, enabled: async () => (await nativeBridge.config()).enabled }).init();

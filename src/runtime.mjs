@@ -46,10 +46,11 @@ export async function writeSubagentPatch(root) {
 
 // Per-task overlay for the sdk-web profile: pins this task's webserver port
 // and mounts @codex-dsh/web-embed with the bridge-owned URL file it writes.
-export async function writeWebEmbedPatch(root, { port, urlFile }) {
+export async function writeWebEmbedPatch(root, { port, urlFile, key }) {
   const dir = join(root, 'patches');
   await mkdir(dir, { recursive: true });
-  const path = join(dir, `web-embed-${port}.yaml`);
+  if(key!==undefined&&!/^[a-f0-9-]+$/i.test(key))throw Error('Invalid native runtime patch identity');
+  const path = join(dir, `web-embed-${key??port}.yaml`);
   const yaml = [
     WEB_RUNTIME_PATCH.trimEnd(),
     `- id: webserver`,
