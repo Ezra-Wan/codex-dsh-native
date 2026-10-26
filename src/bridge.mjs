@@ -33,7 +33,7 @@ function alive(pid) {
 }
 
 export class Bridge {
-  constructor({ root, runtimeFactory = createRuntime, idleMs = 120_000, maxParallel = 2, patches = [], webEmbedBasePort = 8800, networkSnapshot = localNetworkSnapshot }) {
+  constructor({ root, runtimeFactory = createRuntime, idleMs = 120_000, maxParallel = 2, patches = [], webEmbedBasePort = 0, networkSnapshot = localNetworkSnapshot }) {
     this.root = resolve(root);
     this.home = join(this.root, 'dsh-home');
     this.tasks = join(this.root, 'tasks');
@@ -60,6 +60,9 @@ export class Bridge {
   // Each web-embed task owns one loopback port; allocation is deterministic
   // from the base and skips ports already handed out in this process.
   nextWebPort() {
+    // The native webserver supports port 0 and publishes the actual bound
+    // origin. Let the OS claim the socket atomically, across controllers too.
+    if(this.webEmbedBasePort===0)return 0;
     while([...this.live.values()].some(entry=>entry.record.webPort===this.webEmbedBasePort+this.portCursor+1))this.portCursor++;
     if (this.webEmbedBasePort + this.portCursor + 1 > 65535) {
       throw new Error('Web port range exhausted; restart the bridge with a lower CODEX_DSH_WEB_BASE_PORT.');
@@ -196,6 +199,7 @@ export class Bridge {
       if (!current()) return;
       if (state?.url) {
         record.nativeUrl = state.url;
+        record.webPort=Number(new URL(state.url).port);
         record.nativeUrlGeneration = record.runtimeGeneration;
         record.updatedAt = new Date().toISOString();
         await this.save(record).catch(() => {});
@@ -420,9 +424,14 @@ export class Bridge {
     if(useOps)patches.push(await writeOpsPatch(this.root,record.ops));
     if(record.subagents)patches.push(await writeSubagentPatch(this.root));
     if(record.webEmbed){
-      const urlFile=join(this.root,'task-urls',`${record.webPort}.json`);await rm(urlFile,{force:true});
-      patches.push(await writeWebEmbedPatch(this.root,{port:record.webPort,urlFile}));
-      record.webUrlFile=urlFile;record.runtimeGeneration=(record.runtimeGeneration??0)+1;record.nativeUrl=null;
+      const generation=(record.runtimeGeneration??0)+1;
+      const key=`${record.agent_id}-${generation}`;
+      // Private files follow task + generation, never a shared "0.json" or a
+      // recycled port. Cold views also move away from legacy fixed ports.
+      const port=this.webEmbedBasePort===0?0:record.webPort;
+      const urlFile=join(this.root,'task-urls',`${key}.json`);await rm(urlFile,{force:true});
+      patches.push(await writeWebEmbedPatch(this.root,{port,urlFile,key}));
+      record.webRequestedPort=port;record.webUrlFile=urlFile;record.runtimeGeneration=generation;record.nativeUrl=null;
     }
     entry.runtime=this.runtimeFactory(record,{home:record.webEmbed?await this.prepareTaskHome(record.agent_id):this.home,patches,...(useOps?{profile:opsProfile(!!record.webEmbed)}:record.webEmbed?{profile:'sdk-web'}:{})});
     record.runtimeMayExist=true;await this.save(record);await entry.runtime.start();

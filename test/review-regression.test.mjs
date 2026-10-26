@@ -148,14 +148,14 @@ test('the guard accepts the bridge\'s own fresh writes but rejects external ones
 });
 
 test('the native URL is generation-scoped: release revokes it, cold followup re-collects the new token', async t => {
-  // Isolated port band: parallel test files each allocate from 8801.
+  // Explicit port-band compatibility; URL files still belong to generations.
   const { root, fake, bridge } = await setup(t, { webEmbedBasePort: 8850 });
   await bridge.setEnabled(true);
   const task = await bridge.start({ cwd: root, task: 'two generations', permission: 'read-only' });
   await ready(fake);
-  const urlFile = join(bridge.root, 'task-urls', '8851.json');
+  const urlFile = bridge.live.get(task.agent_id).record.webUrlFile;
   await mkdir(join(bridge.root, 'task-urls'), { recursive: true });
-  const writeUrl = token => writeFile(urlFile, JSON.stringify({ url: `http://127.0.0.1:8851/?token=${token}`, pid: 1, writtenAt: new Date().toISOString() }));
+  const writeUrl = token => writeFile(bridge.live.get(task.agent_id).record.webUrlFile, JSON.stringify({ url: `http://127.0.0.1:8851/?token=${token}`, pid: 1, writtenAt: new Date().toISOString() }));
   await writeUrl('gen1');
   for (let i = 0; i < 40 && !(await bridge.status(task.agent_id)).nativeUrl; i++) await new Promise(r => setTimeout(r, 100));
   assert.equal((await bridge.status(task.agent_id)).nativeUrl, 'http://127.0.0.1:8851/?token=gen1');
@@ -169,6 +169,7 @@ test('the native URL is generation-scoped: release revokes it, cold followup re-
   // so the new generation's adapter writes the new token afterwards.
   await bridge.followup(task.agent_id, 'continue');
   await ready(fake, 1);
+  assert.notEqual(bridge.live.get(task.agent_id).record.webUrlFile,urlFile,'cold generations never reuse a port-keyed URL file');
   await assert.rejects(readFile(urlFile, 'utf8'), { code: 'ENOENT' }, 'new runtime clears the previous URL before the adapter announces');
   await writeUrl('gen2');
   for (let i = 0; i < 40 && (await bridge.status(task.agent_id)).nativeUrl !== 'http://127.0.0.1:8851/?token=gen2'; i++) {
@@ -209,11 +210,11 @@ test('web-embed tasks launch the sdk-web profile, pick up the adapter URL and cl
   assert.equal(runtime.options?.profile ?? (fake.lastOptions?.profile), 'sdk-web');
   const overlay = await readFile(runtime.patches[1], 'utf8');
   assert.match(overlay, /id: webserver/);
-  assert.match(overlay, /port: 8801/, 'per-task port pinned in the overlay');
+  assert.match(overlay, /port: 0\b/, 'the native webserver lets the OS bind an available port');
   assert.match(overlay, /@codex-dsh\/web-embed/);
   assert.match(overlay, /task-urls/);
   // The adapter writes the URL file once the in-process web stack is live.
-  const urlFile = join(bridge.root, 'task-urls', '8801.json');
+  const urlFile = runtime.record.webUrlFile;
   await mkdir(join(bridge.root, 'task-urls'), { recursive: true });
   await writeFile(urlFile, JSON.stringify({ url: 'http://127.0.0.1:8801/?token=tok', pid: 1, writtenAt: new Date().toISOString() }));
   for (let i = 0; i < 40 && !(await bridge.status(task.agent_id)).nativeUrl; i++) {
