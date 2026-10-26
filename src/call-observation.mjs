@@ -38,6 +38,8 @@ export function updateObservation(record, { freeze = false } = {}) {
     call.error = record.error ?? null;
     call.failure = record.failure ?? null;
     call.resultPath = record.resultPath ?? null;
+    call.usage = structuredClone(record.usage ?? null);
+    call.finishReason = record.finishReason ?? null;
     call.finished_at = new Date().toISOString();
   }
 }
@@ -49,6 +51,7 @@ export function observationSummary(record, callId = record.currentCallId) {
   return { conversation_id: record.conversationId ?? null, observation: { ...call },
     ...(callId !== record.currentCallId ? { turn: call.turn, status: call.status,
       error: call.error ?? null, failure: call.failure ?? null, resultPath: call.resultPath ?? null,
+      usage: structuredClone(call.usage ?? null), finishReason: call.finishReason ?? null,
       final: undefined, progress: {}, recentActions: [], warnings: [] } : {}) };
 }
 
