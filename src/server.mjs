@@ -1,6 +1,7 @@
 import { fileURLToPath } from 'node:url';
 import { readFile, mkdir, appendFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import {randomUUID} from 'node:crypto';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
@@ -32,7 +33,13 @@ if (arg) {
   const add = (name, description, inputSchema, handler, presentation = {}) => server.registerTool(name, { description, inputSchema, ...presentation }, async (args, extra) => {
     try {
       const result = await handler(args, extra);
-      return { content: [{ type: 'text', text: JSON.stringify(result) }], structuredContent: result };
+      // Current Codex supersedes earlier same-resource widgets in a parent
+      // turn when no instance ID exists. Distinct UI entries need distinct
+      // IDs, even when observing the SAME native call. This is an installed
+      // host compatibility seam, not a portable MCP rendering guarantee.
+      const widgetMeta=presentation._meta?.ui?.resourceUri?{'openai/widgetSessionId':randomUUID()}:undefined;
+      return { content: [{ type: 'text', text: JSON.stringify(result) }], structuredContent: result,
+        ...(widgetMeta?{_meta:widgetMeta}:{}) };
     } catch (error) {
       return { isError: true, content: [{ type: 'text', text: String(error.message) }] };
     }
