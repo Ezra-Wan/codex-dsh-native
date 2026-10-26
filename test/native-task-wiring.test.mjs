@@ -7,7 +7,7 @@ import { randomUUID } from 'node:crypto';
 import { createNativeDisplayMode } from '../ui/native-presentation.mjs';
 import { createNativeTaskLayout } from '../ui/native-task-layout.mjs';
 
-async function setup() {
+async function setup(sideEntry=false) {
   const source = (await readFile(new URL('../ui/native-task.mjs', import.meta.url), 'utf8')).replace(/^import .*;\r?\n/gm, '');
   const calls = [], selected = [], nodes = new Map(), states = new Map();
   const node = id => nodes.get(id) ?? nodes.set(id, { style: {}, dataset: {}, options: [], hidden: false,
@@ -21,7 +21,8 @@ async function setup() {
   }, sendSizeChanged: async () => {}, connect: async () => {}, getHostContext: () => ({ displayMode: 'inline' }),
     requestTeardown: async () => {}, requestDisplayMode: async () => { throw Error('must not force side open'); } };
   const result = await runInNewContext(`(async()=>{${source}\nreturn {receive,app,choose};})()`, {
-    taskIdentity, App: function() { return app; }, AppWebEntry: function() {}, createNativeDisplayMode, createNativeTaskLayout,
+    __DSH_SIDE_ENTRY__:sideEntry,
+    taskIdentity, App: function(_info,capabilities) { app.declaredCapabilities=capabilities;return app; }, AppWebEntry: function() {}, createNativeDisplayMode, createNativeTaskLayout,
     createNativeTaskController: () => ({ select: async task => selected.push(task), clear: async () => { clears++; }, dispose: async () => {} }),
     requestNativeViewClose: async () => {}, installNativeFonts: async () => {},
     document: { getElementById: node, createElement: () => node(randomUUID()), head: node('head'),
@@ -40,12 +41,19 @@ test('actual app wiring never selects peer body inline; closing side cannot reop
   h.receive(task('A', 'A1', 'peer')); await settle();
   assert.equal(h.selected.length, 0);
   assert.equal(h.nodes.get('html').dataset.sideOnly, 'true');
+  assert.equal(h.nodes.get('native-toolbar').hidden,true,'no inline placeholder asking the user for another click');
   h.app.onhostcontextchanged({ displayMode: 'fullscreen' }); await settle();
   assert.equal(h.selected.at(-1).agent_id, 'A');
   const count = h.selected.length;
   h.app.onhostcontextchanged({ displayMode: 'inline' }); await settle();
   assert.equal(h.selected.length, count);
   assert.equal(h.nodes.get('html').dataset.sideOnly, 'true');
+});
+
+test('side resource initializes as fullscreen-only, before any task data arrives', async () => {
+  const h=await setup(true);
+  assert.equal(h.app.declaredCapabilities.availableDisplayModes.length,1);
+  assert.equal(h.app.declaredCapabilities.availableDisplayModes[0],'fullscreen');
 });
 
 test('actual app wiring pins old invocation on poll and retry; side selection cannot rewrite its inline owner', async () => {

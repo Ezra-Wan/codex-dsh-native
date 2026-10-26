@@ -16,8 +16,15 @@ test('production MCP switch exposes native carrier on dispatch without starting 
       env:{...process.env,CODEX_DSH_BRIDGE_HOME:root,CODEX_DSH_UI:'mcp',DSH_NATIVE_REPLAY:'off'},stderr:'pipe'}));
     const {tools}=await client.listTools();
     const uri=tools.find(tool=>tool.name==='ds_start')._meta.ui.resourceUri;
-    assert.equal(uri,'ui://dsh-native/task-v13.html');
+    assert.equal(uri,'ui://dsh-native/task-v14.html');
     assert.equal(tools.find(tool=>tool.name==='ds_followup')._meta.ui.resourceUri,uri);
+    const peerUri=tools.find(tool=>tool.name==='ds_start_peer')._meta.ui.resourceUri;
+    assert.notEqual(peerUri,uri);
+    for(const name of ['ds_followup_peer','ds_observe_peer','ds_fallback_peer','ds_panel'])assert.equal(tools.find(t=>t.name===name)._meta.ui.resourceUri,peerUri);
+    const peerResource=await client.readResource({uri:peerUri});
+    assert.deepEqual(peerResource.contents[0]._meta['openai/ui'],{availableDisplayModes:['fullscreen'],preferredDisplayMode:'fullscreen'});
+    assert.match(peerResource.contents[0].text,/__DSH_SIDE_ENTRY__=true/);
+    assert.deepEqual((await client.readResource({uri})).contents[0]._meta['openai/ui'].availableDisplayModes,['inline','fullscreen']);
     assert.match(client.getInstructions(),/Observe is allowed whenever/);
     assert.doesNotMatch(client.getInstructions(),/Do not emit extra observe|single user-visible entry/);
     for(const name of ['native_bootstrap','native_rpc','native_stream_open','native_stream_send','native_view_close']){

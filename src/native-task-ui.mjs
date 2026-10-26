@@ -5,7 +5,8 @@ import { NativeWebPeer } from './native-web-peer.mjs';
 import { nativeTaskBootstrap } from './native-task-bootstrap.mjs';
 import { conversationIdentity, tasksInConversation } from './call-observation.mjs';
 
-export const NATIVE_TASK_URI = 'ui://dsh-native/task-v13.html';
+export const NATIVE_TASK_URI = 'ui://dsh-native/task-v14.html';
+export const NATIVE_PEER_URI = 'ui://dsh-native/peer-v14.html';
 const publicTask = ({ nativeUrl, ...task }) => ({ ...task, nativeViewAvailable: typeof nativeUrl === 'string' });
 
 // The same registration is used by the production switch and the isolated
@@ -36,13 +37,15 @@ export function registerNativeTaskUi(server, { resolveTask, listTasks, retainVie
     view.touched = Date.now();
     return view;
   };
-  server.registerResource('dsh-native-task', NATIVE_TASK_URI, { title: 'DSH 原生任务', mimeType: 'text/html;profile=mcp-app' }, async () => ({
-    contents: [{ uri: NATIVE_TASK_URI, mimeType: 'text/html;profile=mcp-app',
-      text: await readFile(new URL('../dist/native-task.html', import.meta.url), 'utf8'),
+  for(const [uri,sideOnly] of [[NATIVE_TASK_URI,false],[NATIVE_PEER_URI,true]]) {
+  server.registerResource(sideOnly?'dsh-native-peer':'dsh-native-task', uri, { title: sideOnly?'DSH 协作 agent〔peer〕':'DSH 子 agent〔sub〕', mimeType: 'text/html;profile=mcp-app' }, async () => ({
+    contents: [{ uri, mimeType: 'text/html;profile=mcp-app',
+      text: (await readFile(new URL('../dist/native-task.html', import.meta.url), 'utf8')).replace('<head>',`<head><script>globalThis.__DSH_SIDE_ENTRY__=${sideOnly};</script>`),
       _meta: { ui: { prefersBorder: true, csp: { frameDomains: [], connectDomains: [], resourceDomains: [] } },
-        'openai/ui': { availableDisplayModes: ['inline', 'fullscreen'], preferredDisplayMode: 'inline' } },
+        'openai/ui': { availableDisplayModes: sideOnly?['fullscreen']:['inline', 'fullscreen'], preferredDisplayMode: sideOnly?'fullscreen':'inline' } },
     }],
   }));
+  }
   const callId = z.string().uuid().optional();
   add('native_tasks', { agent_id: agent.optional(), conversation_id: z.string().min(1).max(200).optional() }, async (args, extra) => {
     const anchor=args.agent_id?await resolveTask(args.agent_id,false):null;

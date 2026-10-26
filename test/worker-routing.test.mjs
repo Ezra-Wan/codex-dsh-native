@@ -16,15 +16,16 @@ test('actual bridge MCP routes worker start, observe, opaque events, review and 
   try{
     await client.connect(new StdioClientTransport({command:process.execPath,args:[fileURLToPath(new URL('../src/server.mjs',import.meta.url))],env:{...process.env,CODEX_DSH_BRIDGE_HOME:root,CODEX_DSH_UI:'mcp',CODEX_DSH_WORKER_CONFIG:config,DSH_NATIVE_REPLAY:'off'},stderr:'pipe'}));
     await assert.rejects(readFile(remote),/ENOENT/);await call('ds_bridge',{enabled:true});
-    const args={task:'offline fixture',cwd:root,backend:'worker',issue_id:'stable-route-test',permission:'read-only'};
-    const rejected=await client.callTool({name:'ds_start',arguments:{...args,maxTokens:1024}});assert.equal(rejected.isError,true);await assert.rejects(readFile(remote),/ENOENT/);
-    const receipt=await call('ds_start',args);assert.equal(receipt.backend,'worker');assert.ok(receipt.agent_id);
+    const args={task:'offline fixture',cwd:root,role:'peer',backend:'worker',issue_id:'stable-route-test',permission:'read-only'};
+    const rejected=await client.callTool({name:'ds_start_peer',arguments:{...args,maxTokens:1024}});assert.equal(rejected.isError,true);await assert.rejects(readFile(remote),/ENOENT/);
+    const wrongEntry=await client.callTool({name:'ds_start',arguments:args});assert.equal(wrongEntry.isError,true);await assert.rejects(readFile(remote),/ENOENT/);
+    const receipt=await call('ds_start_peer',args);assert.equal(receipt.role,'peer');assert.equal(receipt.backend,'worker');assert.ok(receipt.agent_id);
     const first=await call('ds_wait',{agent_id:receipt.agent_id,timeoutMs:5000});assert.equal(first.final,'WORKER_OK');
     const ui=await call('native_state',{agent_id:receipt.agent_id});assert.equal(ui.worker_agent_id,first.worker_agent_id);assert.equal(ui.nativeViewAvailable,false);
     const events=await call('ds_events',{agent_id:receipt.agent_id,after_seq:'opaque:before'});assert.equal(events.next_cursor,'opaque:next');
     const appEvents=await call('native_worker_events',{agent_id:receipt.agent_id,after:'opaque:before'});assert.equal(appEvents.next_cursor,'opaque:next');
     await call('ds_review',{agent_id:receipt.agent_id,verdict:'revise',feedback:'verify revision protocol'});
-    await call('ds_followup',{agent_id:receipt.agent_id,task:'revision'});
+    await call('ds_followup_peer',{agent_id:receipt.agent_id,task:'revision'});
     const second=await call('ds_wait',{agent_id:receipt.agent_id,timeoutMs:5000});assert.equal(second.final,'FOLLOWUP_OK');assert.equal(second.worker_agent_id,first.worker_agent_id);
     await call('ds_review',{agent_id:receipt.agent_id,verdict:'pass',feedback:'fixture result verified'});
     assert.equal((await call('ds_panel',{agent_id:receipt.agent_id})).items.length,1);assert.equal(JSON.parse(await readFile(remote,'utf8')).starts,1);

@@ -6,7 +6,7 @@ import { mkdir, cp, symlink, readFile, writeFile, rm, readdir } from 'node:fs/pr
 import { zstdDecompressSync, zstdCompressSync } from 'node:zlib';
 import { join, resolve } from 'node:path';
 import { createRuntime, writeWebEmbedPatch } from '../src/runtime.mjs';
-import { registerNativeTaskUi, NATIVE_TASK_URI } from '../src/native-task-ui.mjs';
+import { registerNativeTaskUi, NATIVE_TASK_URI, NATIVE_PEER_URI } from '../src/native-task-ui.mjs';
 import { NativeWebPeer } from '../src/native-web-peer.mjs';
 import { readNativeEvents } from '../src/trace.mjs';
 
@@ -17,7 +17,7 @@ delete process.env.DEEPSEEK_API_KEY; delete process.env.OPENAI_API_KEY;
 const fixtureId = 'bc243aa7-57aa-47b5-b219-c73a6a45c5ed';
 const secondFixtureId = '19c2730d-351e-461d-93b5-f888293eb07c';
 const states = new Map(['aaaaaaaa-0000-4000-8000-000000000001','bbbbbbbb-0000-4000-8000-000000000002'].map((agent_id,index) => [agent_id, {
-  task: { agent_id, session_id: index ? secondFixtureId : fixtureId, name: `原生验收 ${index ? 'B' : 'A'}`, role: 'sub', backend: 'native',
+  task: { agent_id, session_id: index ? secondFixtureId : fixtureId, name: `原生验收 ${index ? 'B' : 'A'}`, role: index?'sub':'peer', backend: 'native',
     conversation_id: 'isolated-native-fixture',
     // Both histories exist on disk; a missing URL means lazy initialization,
     // not a permanently unavailable page. Give each invocation a stable ID
@@ -91,6 +91,7 @@ server.registerTool('show_native_task_probe',{title:'DSH 原生任务 · 复用�
   content:[{type:'text',text:'Zero-model native task view; automatic selection and A/B display require user observation.'}],
   structuredContent:{items:[...states.values()].map(({task:{nativeUrl,...task}})=>task)},
 }));
+server.registerTool('show_native_peer_probe',{title:'DS 协作 agent〔peer〕· 侧边验收',description:'Zero-model peer history using the production fullscreen-only resource. No inline placeholder and no paid task.',inputSchema:{},_meta:{ui:{resourceUri:NATIVE_PEER_URI}}},async()=>{const {nativeUrl,...task}=[...states.values()][0].task;return{content:[{type:'text',text:'Zero-model peer side-entry acceptance; actual host behavior requires observation.'}],structuredContent:task};});
 async function close(){if(closing)return;closing=true;ui.close();await Promise.all([...states.values()].map(async state=>{await state.starting?.catch(()=>{});await state.runtime?.close().catch(()=>{});}));await server.close();}
 process.stdin.once('end',()=>{void close();});process.once('SIGINT',()=>{void close();});process.once('SIGTERM',()=>{void close();});
 await server.connect(new StdioServerTransport());
