@@ -1,6 +1,6 @@
 import {realpath,readFile} from 'node:fs/promises';
 import {bridgeTaskResolver} from './native-task-ui.mjs';
-import {updateObservation} from './call-observation.mjs';
+import {updateObservation,observationSummary} from './call-observation.mjs';
 
 const active=new Set(['starting','running','stopping','unknown']);
 const canonical=async path=>{const value=await realpath(path);return process.platform==='win32'?value.toLowerCase():value;};
@@ -61,7 +61,10 @@ export class TaskRouter {
     const backend=await this.backend(id);
     const current=backend===this.worker?await this.worker.status(id):await this.resolveNative(id,wait);
     if(!callId)return current;
-    const record=await backend.read(id),scoped=backend.summary(record,callId);
+    // A historical call changes only its observation/result snapshot. Never
+    // overwrite the current runtime URL/generation with an older disk record.
+    const record=backend===this.native?(this.native.live.get(id)?.record??await backend.read(id)):await backend.read(id);
+    const scoped=observationSummary(record,callId);
     if(callId!==record.currentCallId&&scoped.resultPath){
       const final=await readFile(scoped.resultPath,'utf8');
       scoped.final=final.slice(0,record.returnChars);scoped.resultTruncated=scoped.final.length<final.length;

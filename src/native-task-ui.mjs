@@ -93,6 +93,9 @@ export function bridgeTaskResolver(bridge) {
       const live=bridge.live.get(id),record=live?.record??await bridge.read(id);
       if(!live?.busy&&record.webEmbed&&record.persisted&&!record.fallbackReserved)await bridge.openView(id);
     }
+    // Another card may already be restoring this settled session. Execution
+    // being completed does not make its newly-created view URL ready.
+    if(wait&&bridge.live.get(id)?.urlWait)await bridge.live.get(id).urlWait;
     const deadline = Date.now() + (wait ? 25000 : 0);
     while (true) {
       const live = bridge.live.get(id);
