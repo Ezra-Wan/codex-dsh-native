@@ -16,7 +16,7 @@ test('production MCP switch exposes native carrier on dispatch without starting 
       env:{...process.env,CODEX_DSH_BRIDGE_HOME:root,CODEX_DSH_UI:'mcp',DSH_NATIVE_REPLAY:'off'},stderr:'pipe'}));
     const {tools}=await client.listTools();
     const uri=tools.find(tool=>tool.name==='ds_start')._meta.ui.resourceUri;
-    assert.equal(uri,'ui://dsh-native/task-v14.html');
+    assert.equal(uri,'ui://dsh-native/task-v15.html');
     assert.equal(tools.find(tool=>tool.name==='ds_followup')._meta.ui.resourceUri,uri);
     const peerUri=tools.find(tool=>tool.name==='ds_start_peer')._meta.ui.resourceUri;
     assert.notEqual(peerUri,uri);
@@ -24,6 +24,7 @@ test('production MCP switch exposes native carrier on dispatch without starting 
     const peerResource=await client.readResource({uri:peerUri});
     assert.deepEqual(peerResource.contents[0]._meta['openai/ui'],{availableDisplayModes:['fullscreen'],preferredDisplayMode:'fullscreen'});
     assert.match(peerResource.contents[0].text,/__DSH_SIDE_ENTRY__=true/);
+    assert.ok((await client.readResource({uri:'ui://dsh-native/task-v14.html'})).contents[0].text===(await client.readResource({uri})).contents[0].text,'old cards can resolve the current packed frontend through their resource URI');
     assert.deepEqual((await client.readResource({uri})).contents[0]._meta['openai/ui'].availableDisplayModes,['inline','fullscreen']);
     assert.match(client.getInstructions(),/Observe is allowed whenever/);
     assert.doesNotMatch(client.getInstructions(),/Do not emit extra observe|single user-visible entry/);

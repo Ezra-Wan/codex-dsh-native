@@ -5,8 +5,8 @@ import { NativeWebPeer } from './native-web-peer.mjs';
 import { nativeTaskBootstrap } from './native-task-bootstrap.mjs';
 import { conversationIdentity, tasksInConversation } from './call-observation.mjs';
 
-export const NATIVE_TASK_URI = 'ui://dsh-native/task-v14.html';
-export const NATIVE_PEER_URI = 'ui://dsh-native/peer-v14.html';
+export const NATIVE_TASK_URI = 'ui://dsh-native/task-v15.html';
+export const NATIVE_PEER_URI = 'ui://dsh-native/peer-v15.html';
 const publicTask = ({ nativeUrl, ...task }) => ({ ...task, nativeViewAvailable: typeof nativeUrl === 'string' });
 
 // The same registration is used by the production switch and the isolated
@@ -37,8 +37,8 @@ export function registerNativeTaskUi(server, { resolveTask, listTasks, retainVie
     view.touched = Date.now();
     return view;
   };
-  for(const [uri,sideOnly] of [[NATIVE_TASK_URI,false],[NATIVE_PEER_URI,true]]) {
-  server.registerResource(sideOnly?'dsh-native-peer':'dsh-native-task', uri, { title: sideOnly?'DSH 协作 agent〔peer〕':'DSH 子 agent〔sub〕', mimeType: 'text/html;profile=mcp-app' }, async () => ({
+  for(const [uri,sideOnly] of [[NATIVE_TASK_URI,false],[NATIVE_PEER_URI,true],['ui://dsh-native/task-v14.html',false],['ui://dsh-native/peer-v14.html',true]]) {
+  server.registerResource(`${sideOnly?'dsh-native-peer':'dsh-native-task'}-${uri.includes('v14')?'v14':'v15'}`, uri, { title: sideOnly?'DSH 协作 agent〔peer〕':'DSH 子 agent〔sub〕', mimeType: 'text/html;profile=mcp-app' }, async () => ({
     contents: [{ uri, mimeType: 'text/html;profile=mcp-app',
       text: (await readFile(new URL('../dist/native-task.html', import.meta.url), 'utf8')).replace('<head>',`<head><script>globalThis.__DSH_SIDE_ENTRY__=${sideOnly};</script>`),
       _meta: { ui: { prefersBorder: true, csp: { frameDomains: [], connectDomains: [], resourceDomains: [] } },
