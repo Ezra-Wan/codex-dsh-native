@@ -51,6 +51,12 @@ Codex 保留自己的登录、工作区与运行环境；DeepSeek 在官方 DSH 
 
 调用方选择委派关系和任务模式；`light` / `coding` 是预算预设，不决定模型的上下级，也不限制模型只能处理某一类任务。同一 DSH 会话不可同时执行两次桥接请求；并行任务使用不同会话。
 
+## 角色和观察入口（当前 main）
+
+`ds_start` / `ds_followup` / `ds_observe` 是子 agent〔sub〕的流内入口；独立协作使用 `ds_start_peer` / `ds_followup_peer` / `ds_observe_peer`，其资源在加载前声明仅 fullscreen（Codex 侧边）。worker兜底同样按角色使用 `ds_fallback` 或 `ds_fallback_peer`。两个入口系列共用同一执行层，不增加一次模型派发。
+
+这是 MCP 工具资源声明的区别，不按运行数量推测角色。侧边页首和任务切换项持续显示实际 sub/peer。v14 的宿主表现仍待本轮实际验收；旧预览标签不因此变化。
+
 ## 同一个 Codex 页面内可观察
 
 验收目标：Codex 明确指定 role=sub 时，流内只展示当次问题、响应和执行细节，结束后固定；侧边查看该 agent 完整历史。role=peer 时仅支持侧边正文，不根据实际运行数量猜测。Codex 继续自己的工作。不能把只有最终总结的工具调用当作完成，也不以另开独立监控网站替代此要求。
