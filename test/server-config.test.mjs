@@ -27,9 +27,11 @@ test('server accepts an isolated web port range and rejects invalid configuratio
     env: { ...env, CODEX_DSH_WEB_BASE_PORT: '18900' }, timeout: 5000,
   });
   assert.equal(JSON.parse(stdout).enabled, false);
+  const automatic=await run(process.execPath,[server,'--status'],{env:{...env,CODEX_DSH_WEB_BASE_PORT:'0'},timeout:5000});
+  assert.equal(JSON.parse(automatic.stdout).enabled,false,'port zero is the explicit native OS-assigned mode');
   for (const value of ['', 'invalid', '1023', '65534', '18900.5']) {
     await assert.rejects(run(process.execPath, [server, '--status'], {
       env: { ...env, CODEX_DSH_WEB_BASE_PORT: value }, timeout: 5000,
-    }), error => error.code === 1 && /CODEX_DSH_WEB_BASE_PORT must be an integer/.test(error.stderr));
+    }), error => error.code === 1 && /CODEX_DSH_WEB_BASE_PORT must be /.test(error.stderr));
   }
 });
