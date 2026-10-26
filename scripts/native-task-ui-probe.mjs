@@ -19,6 +19,11 @@ const secondFixtureId = '19c2730d-351e-461d-93b5-f888293eb07c';
 const states = new Map(['aaaaaaaa-0000-4000-8000-000000000001','bbbbbbbb-0000-4000-8000-000000000002'].map((agent_id,index) => [agent_id, {
   task: { agent_id, session_id: index ? secondFixtureId : fixtureId, name: `原生验收 ${index ? 'B' : 'A'}`, role: 'sub', backend: 'native',
     conversation_id: 'isolated-native-fixture',
+    // Both histories exist on disk; a missing URL means lazy initialization,
+    // not a permanently unavailable page. Give each invocation a stable ID
+    // before its first bootstrap, just like a production dispatch.
+    nativeViewRestorable: true,
+    observation: { call_id: agent_id, turn: 1, start_seq: null, end_seq: null, frozen: false, status: 'waiting' },
     status: 'waiting', runtimeGeneration: 1, nativeUrl: null }, index,
 }]));
 const facts = { modelCalls: 0, originalFrontend: true, productionCarrier: true, visualAcceptance: 'pending', signals: [] };
