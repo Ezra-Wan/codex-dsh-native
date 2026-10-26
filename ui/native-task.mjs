@@ -1,3 +1,4 @@
+import {taskIdentity} from './task-identity.mjs';
 import { App } from '@modelcontextprotocol/ext-apps';
 import { AppWebEntry } from '@deepseek-ai/dsh-client-web';
 import { createNativeMcpRpc } from './native-mcp-rpc.mjs';
@@ -12,7 +13,7 @@ import {createObservationContext,registerNativeObservation} from './native-obser
 
 const app = new App({ name: 'DSH native task', version: '1' }, { availableDisplayModes: ['inline', 'fullscreen'] }, { autoResize: false });
 const root = document.getElementById('root'), status = document.getElementById('state'), tasks = document.getElementById('tasks');
-function renderTaskStatus(task){status.textContent=`${task.name||'DSH'} · ${task.backend==='worker'?'旧 worker 兜底':task.role==='sub'?'派生任务':'协作工作区'} · ${task.status}${task.observation?.frozen?' · 当次记录已固定':''}${task.failure?.label?' · '+task.failure.label:''}`;status.title=task.error??'';}
+function renderTaskStatus(task){document.title=taskIdentity(task);status.textContent=`${taskIdentity(task)} · ${task.status}${task.observation?.frozen?' · 当次记录已固定':''}${task.failure?.label?' · '+task.failure.label:''}`;status.title=task.error??'';}
 function showLoading(message, busy = true) {
   const mask = document.getElementById('native-loading');
   mask.hidden = false; mask.dataset.busy = String(busy);
@@ -105,7 +106,7 @@ function receive(data) {
     if (!task.agent_id) continue;
     let option = [...tasks.options].find(item => item.value === task.agent_id);
     if (!option) { option = document.createElement('option'); option.value = task.agent_id; tasks.appendChild(option); }
-    option.textContent = `${task.name || task.agent_id.slice(0, 8)} · ${task.backend==='worker'?'worker 兜底':task.role === 'sub' ? '派生任务' : '协作工作区'}`;
+    option.textContent = taskIdentity(task);
   }
   const task = data.agent_id ? data : items.find(item => item.agent_id === selected) ?? items.at(-1);
   if (task?.agent_id) { selectionSeq++;anchor??=task.agent_id;entryTask??=task;tasks.value=task.agent_id;void present(task); }
@@ -129,7 +130,7 @@ app.onhostcontextchanged = context => {
   if(mode!=='fullscreen'&&entryTask){currentTask=entryTask;selected=entryTask.agent_id;selectedCall=entryTask.observation?.call_id;}
   if(currentTask)void present(currentTask);
   if(mode==='fullscreen'&&anchor)void rawCall('native_tasks',{agent_id:anchor}).then(data=>{
-    for(const task of data.items??[]){let option=[...tasks.options].find(item=>item.value===task.agent_id);if(!option){option=document.createElement('option');option.value=task.agent_id;tasks.appendChild(option);}option.textContent=task.name||task.agent_id.slice(0,8);}
+    for(const task of data.items??[]){let option=[...tasks.options].find(item=>item.value===task.agent_id);if(!option){option=document.createElement('option');option.value=task.agent_id;tasks.appendChild(option);}option.textContent=taskIdentity(task);}
   }).catch(()=>{});
   // Stable native root: no teardown or remount on a display-mode notification.
 };
