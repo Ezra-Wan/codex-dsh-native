@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { runInNewContext } from 'node:vm';
+import {taskIdentity} from '../ui/task-identity.mjs';
 import { randomUUID } from 'node:crypto';
 import { createNativeDisplayMode } from '../ui/native-presentation.mjs';
 import { createNativeTaskLayout } from '../ui/native-task-layout.mjs';
@@ -15,12 +16,12 @@ async function setup() {
   let tick, clears = 0;
   const app = { callServerTool: async ({ name, arguments: args }) => {
     calls.push({ name, args });
-    const payload = name === 'native_state' ? states.get(args.agent_id) : name === 'native_tasks' ? { items: [] } : {};
+    const payload = name === 'native_state' ? states.get(args.agent_id) : name === 'native_tasks' ? { items: [...states.values()] } : {};
     return { _meta: { payload } };
   }, sendSizeChanged: async () => {}, connect: async () => {}, getHostContext: () => ({ displayMode: 'inline' }),
     requestTeardown: async () => {}, requestDisplayMode: async () => { throw Error('must not force side open'); } };
   const result = await runInNewContext(`(async()=>{${source}\nreturn {receive,app,choose};})()`, {
-    App: function() { return app; }, AppWebEntry: function() {}, createNativeDisplayMode, createNativeTaskLayout,
+    taskIdentity, App: function() { return app; }, AppWebEntry: function() {}, createNativeDisplayMode, createNativeTaskLayout,
     createNativeTaskController: () => ({ select: async task => selected.push(task), clear: async () => { clears++; }, dispose: async () => {} }),
     requestNativeViewClose: async () => {}, installNativeFonts: async () => {},
     document: { getElementById: node, createElement: () => node(randomUUID()), head: node('head'),
@@ -49,14 +50,16 @@ test('actual app wiring never selects peer body inline; closing side cannot reop
 
 test('actual app wiring pins old invocation on poll and retry; side selection cannot rewrite its inline owner', async () => {
   const h = await setup(), a1 = task('A', 'A1');
-  h.states.set('A', a1); h.states.set('B', task('B', 'B1'));
+  h.states.set('A', a1); h.states.set('B', task('B', 'B1', 'peer'));
   h.receive(a1); await settle();
   await h.tick();
   assert.equal(h.calls.findLast(c => c.name === 'native_state').args.call_id, 'A1');
   await h.choose('A', true);
   assert.equal(h.calls.findLast(c => c.name === 'native_state').args.call_id, 'A1');
   h.app.onhostcontextchanged({ displayMode: 'fullscreen' }); await settle();
+  assert.match(h.nodes.get('tasks').options.find(x=>x.value==='B').textContent,/协作 agent〔peer〕/);
   await h.choose('B');
+  assert.match(h.nodes.get('state').textContent,/协作 agent〔peer〕/);
   assert.equal(h.calls.findLast(c => c.name === 'native_state').args.call_id, undefined, 'A call id is never sent to B');
   h.app.onhostcontextchanged({ displayMode: 'inline' }); await settle();
   assert.equal(h.selected.at(-1).agent_id, 'A');
