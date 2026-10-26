@@ -29,3 +29,10 @@ CodexHost's execution flow informed the design; no CodexHost source or diagram a
 - Pinned revision: `4a7ec1240de82527f2222b4af5202fa7b2ad731b`, package `0.4.1`.
 - MIT, copyright (c) 2026 MeteorNOX. The explicit preparation script copies the original LICENSE, PROVENANCE.md and THIRD_PARTY_NOTICES.md alongside the upstream runtime into the selected isolated local directory; upstream code is not vendored in this repository.
 - Adaptation: the Windows selector requires one explicit Codex root PID. Original presentation and click-to-show balance interaction remain unchanged, as confirmed by the user; no extra balance strip is rendered. No upstream desktop autostart, Codex plugin registration or model call is performed by preparation. Electron retains its own packaged licenses/notices.
+
+## DeepSeek native conversation binding
+
+- Upstream package: `@deepseek-ai/dsh-client-ui-conversation@0.2.1-rc.2`, same DeepSeek revision as above.
+- Copied `BoundConversation` from the published `lib/client.js`; only export form and external store identifier are adapted. Exact installed source bundle SHA256 and extraction details: `vendor/deepseek-bound-conversation/SOURCE.md`.
+- Copyright (c) 2026 DeepSeek. MIT text retained in `vendor/deepseek-bound-conversation/LICENSE`.
+- The separate adapter supplies an invocation event window to the original assembler and renderers; native conversation DOM is not copied or rewritten.

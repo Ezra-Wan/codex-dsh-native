@@ -1,6 +1,22 @@
 # 下一模型交接：Codex 内可观察的原生 DSH 协作
 
-## 当前 TODO：替代旧 worker，失败保留 worker 兜底（2026-10-26）
+## 当前优先：v13 按调用观察，等待实际验收（2026-10-26）
+
+**本节覆盖后文旧的“一个 agent 永远复用第一张卡片 / 禁止 observe / 并行流内观察”等规则。** 用户已要求先修改并重发预览，实际全量回归等回到电脑后再做；本轮不重载主/第二实例、不启动展示服务、不调用真实模型。
+
+- [x] 按明确 role 处理：sub 流内只看当次调用、侧边看完整历史；peer 不挂载流内正文，只在侧边查看。不按运行数量自动判断或迁移。
+- [x] 每次 start/followup 返回独立 observation.call_id；同一 agent/session 继续复用。原生日志保留一份，本地状态只增加调用范围/归属/结果路径。
+- [x] 流内原生 turn/end 后固定，后续同会话的新调用不追加到旧记录；未结束时可显式 ds_observe(freeze:true) 固定已提交范围而不停止任务。没有虚构 Codex 回复结束回调。
+- [x] 原版渲染器和装配器继续复用；复制上游 MIT BoundConversation 类并保留来源，适配原生事件窗口。侧边撤销当次范围限制，沿用原生历史分页。
+- [x] 删除禁止补挂观察入口、承诺隐藏工具行的 instructions；followup 本身也声明卡片资源。任务列表按宿主 openai/session 或明确 conversation_id 筛选，缺身份仅列锚定任务。
+- [x] 本地131/131离线通过；含实际 Cordis/原生装配器/加载清单、卡片模块接线、真实 stdio 对话元数据。新预览版本 v0.1.3-preview.1；发布结果另行记录，不能把计划当已发布。
+- [ ] 用户回来后：隔离第二实例先零模型，再实测同 sub 两次调用、旧记录固定与侧边全部历史、双 peer 仅侧边、跨 Codex 对话身份、冷恢复/错误/原功能回归。新行为均不得借用 v12 目视结果声称通过。
+- [ ] 主实例配置迁移仍待办：之前缺 CODEX_DSH_UI=mcp，且 deepseek_worker.enabled=false 会使默认兜底拒绝连接；本轮未改配置。测试时不要误用旧 iframe 或直接影响主实例。
+- [ ] 旧 worker 保留降级状态/结果/工具摘要，不具备原生正文及完整原生历史；本轮未宣称其按调用工具记录裁剪等价。瞬态未提交片段不额外复制存储，崩溃后不保证恢复。
+
+完整说明及用户实际验收步骤见 [本版预览](docs/preview-v0.1.3.md)。
+
+## 既有能力与未完成工作（历史基线，仍须保留）
 
 **公开预览已发布（2026-10-26）**：[仓库](https://github.com/Ezra-Wan/codex-dsh-native) 已是 public；[v0.1.2-preview.1](https://github.com/Ezra-Wan/codex-dsh-native/releases/tag/v0.1.2-preview.1) 是源码 prerelease、指向207971e，自有MIT且保留上游许可。全新安装及本地116/116通过，[GitHub Windows/Node24 CI](https://github.com/Ezra-Wan/codex-dsh-native/actions/runs/40210942102)成功。Git全历史及完整夹具扫描未发现凭据；已无凭据下载公开源码包核对SHA256一致。实际宿主/断网验收仍独立，主实例未重载。
 
