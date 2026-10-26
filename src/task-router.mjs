@@ -27,7 +27,7 @@ export class TaskRouter {
     await this.guardWriter(args);
     return(args.backend==='worker'?this.worker:this.native).start(args);
   });}
-  followup(id,task){return this.serial(async()=>{if(this.closing)throw Error('Bridge is closing');const backend=await this.backend(id),record=await backend.read(id);await this.guardWriter(record,id);return backend.followup(id,task);});}
+  followup(id,task,options={}){return this.serial(async()=>{if(this.closing)throw Error('Bridge is closing');const backend=await this.backend(id),record=await backend.read(id);await this.guardWriter(record,id);return backend.followup(id,task,options);});}
   async status(id){return(await this.backend(id)).status(id);}
   async wait(id,timeoutMs){return(await this.backend(id)).wait(id,timeoutMs);}
   async stop(id){return(await this.backend(id)).stop(id);}
@@ -49,7 +49,7 @@ export class TaskRouter {
       const previous=(await this.worker.list()).filter(item=>item.source_agent_id===agent_id);
       if(previous.length>1)throw Error('Multiple fallback records found; inspect rather than dispatch again');
       if(previous.length)return this.worker.status(previous[0].agent_id);
-      const args={task,cwd:source.cwd,permission:source.permission,mode:source.mode,role:source.role,issue_id,name:name??`${source.name||'DSH'} worker fallback`,maxTokens,source_agent_id:agent_id};
+      const args={task,cwd:source.cwd,permission:source.permission,mode:source.mode,role:source.role,issue_id,name:name??`${source.name||'DSH'} worker fallback`,maxTokens,source_agent_id:agent_id,conversation_id:source.conversation_id};
       await this.guardWriter(args,agent_id);
       const result=await this.worker.start(args);
       held.record.fallbackAgentId=result.agent_id;await this.native.save(held.record);

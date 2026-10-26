@@ -1,3 +1,4 @@
+import {beginObservation, observeCallEvent, updateObservation, observationSummary} from './call-observation.mjs';
 import { mkdir, readFile, writeFile, stat, readdir, rm, symlink } from 'node:fs/promises';
 import { isAbsolute, join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -149,7 +150,7 @@ export class Bridge {
     return result;
   }
 
-  async start({ task, cwd, mode = 'light', name = '', model = 'deepseek-v4-flash', provider = 'deepseek-official', maxTokens, effort, permission = 'workspace-write', subagents = false, role = 'peer', backend = 'native', webEmbed = true,ops='off' }) {
+  async start({ task, cwd, mode = 'light', name = '', model = 'deepseek-v4-flash', provider = 'deepseek-official', maxTokens, effort, permission = 'workspace-write', subagents = false, role = 'peer', backend = 'native', webEmbed = true,ops='off', conversation_id }) {
     return this.admit(async () => {
       if (!isAbsolute(cwd) || !(await stat(cwd)).isDirectory()) throw new Error('cwd must be an existing absolute directory');
       if (!MODES[mode]) throw new Error('mode must be light or coding');
@@ -172,7 +173,7 @@ export class Bridge {
       const id = randomUUID();
       const record = {
         agent_id: id, session_id: id, name, cwd: resolve(cwd), mode, model, provider,
-        maxTokens: cap, effort, permission, subagents, role, backend: 'native',ops,
+        maxTokens: cap, effort, permission, subagents, role, backend: 'native',ops, conversationId: conversation_id,
         ...(webEmbed ? { webEmbed: true, webPort: this.nextWebPort() } : {}),
         returnChars: MODES[mode].returnChars,
         status: 'new', turn: 0, createdAt: new Date().toISOString(), persisted: false, runtimeMayExist: false,
@@ -205,13 +206,15 @@ export class Bridge {
     if (current()) record.progress.webEmbedMissed = record.webUrlFile;
   }
 
-  async followup(id, task) {
+  async followup(id, task, { conversation_id } = {}) {
     return this.admit(async () => {
       const current = this.live.get(id);
       if (current?.busy) throw new Error('Agent is busy. Wait or stop before followup.');
       const record = current?.record ?? await this.read(id);
       if(record.status==='unknown')throw new Error('Native state is uncertain; inspect runtime and native history before followup.');
       if(record.fallbackReserved)throw new Error('This native task was retired for worker fallback; continue its fallback task instead.');
+      if (conversation_id && record.conversationId && conversation_id !== record.conversationId) throw new Error('Task belongs to a different Codex conversation');
+      if (conversation_id) record.conversationId = conversation_id;
       await this.assertSessionQuiet(record);
       return this.launch(record, task);
     });
@@ -270,6 +273,7 @@ export class Bridge {
       // identities available for historical inspection across parent turns.
       children: record.children ?? {}, userTakeover: null,
     });
+    beginObservation(record, record.conversationId);
     try { await this.save(record); }
     catch (error) {
       record.status = 'failed';
@@ -335,6 +339,7 @@ export class Bridge {
             };
             return;
           }
+          observeCallEvent(record, event);
           record.progress.eventCount++;
           record.progress.lastEvent = event.type;
           record.progress.lastActivityAt = new Date().toISOString();
@@ -358,6 +363,7 @@ export class Bridge {
       const result = await Promise.race([runPromise, new Promise((_, reject) => {
         entry.interrupt = () => reject(new Error('Interrupted by stop'));
       })]);
+      for (const event of result.events) observeCallEvent(record, event);
       record.final = result.finalResponse;
       const extraUserPrompts = (record.userPrompts ?? 0) - record.turn;
       if (extraUserPrompts > 0) {
@@ -393,6 +399,7 @@ export class Bridge {
       }
       if (record.webEmbed) record.nativeUrl = null;
     } finally {
+      updateObservation(record);
       record.updatedAt = new Date().toISOString();
       // The external-activity guard compares native-log freshness against
       // this mark so the bridge's own writes never read as a user takeover.
@@ -450,7 +457,7 @@ export class Bridge {
     }catch(error){await this.release(id,{force:true});throw error;}
   });}
 
-  summary(record) {
+  summary(record, callId) {
     const { agent_id, session_id, name, mode, model, maxTokens, permission, cwd, turn, status, progress, error, resultPath, finishReason, usage } = record;
     const final = (record.final ?? '').slice(0, record.returnChars);
     const children = Object.entries(record.children ?? {}).map(([child_id, info]) => ({ child_id, ...info }));
@@ -468,7 +475,7 @@ export class Bridge {
       error,
       warnings: record.warnings ?? [],
       recentActions: (record.recentActions ?? []).slice(-6).map(action => ({ ...action, text: action.text?.slice(0, 600), truncated: action.truncated || action.text?.length > 600 })),
-      ...(final || resultPath ? { final, resultPath, resultTruncated: final.length < (record.final ?? '').length, finishReason, usage } : {}) };
+      ...(final || resultPath ? { final, resultPath, resultTruncated: final.length < (record.final ?? '').length, finishReason, usage } : {}), ...observationSummary(record, callId) };
   }
 
   async events(id, afterSeq = -1, limit = 30) {
