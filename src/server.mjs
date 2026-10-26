@@ -8,6 +8,7 @@ import { Bridge } from './bridge.mjs';
 import { WorkerTasks } from './worker-tasks.mjs';
 import { TaskRouter } from './task-router.mjs';
 import { registerNativeTaskUi, NATIVE_TASK_URI } from './native-task-ui.mjs';
+import { conversationIdentity, tasksInConversation } from './call-observation.mjs';
 
 const root = process.env.CODEX_DSH_BRIDGE_HOME ?? fileURLToPath(new URL('../.local/', import.meta.url));
 const webEmbedBasePort = Number(process.env.CODEX_DSH_WEB_BASE_PORT ?? 8800);
@@ -26,11 +27,11 @@ if (arg) {
   else throw new Error('Use --enable, --disable, --status, or no argument for MCP stdio.');
 } else {
   const server = new McpServer({ name: 'codex-dsh-native-p0', version: '0.1.2-preview.1' }, {
-    instructions: 'Optional native DSH bridge. Caller chooses light or coding per task. For independent authorized tasks, issue multiple ds_start calls and retain every agent_id before collecting with ds_wait; do not serialize them by immediately waiting for the first task. The dynamic ds_bridge maxParallel cap covers native roots/resident runtimes only, not all child agents or worker tasks. After ds_start, continue independent parent work in parallel; the dispatch call itself renders the task card, which is the single user-visible entry tracking this task. Do not emit extra observe/panel calls to show progress — observation belongs to the card (and ds_panel only when the user asks for a persistent side entry). ds_observe is only for attaching a card to a task dispatched before this card-bearing flow. Collect with ds_wait only when results are needed; a timeout means pending, not completion. There is no native Codex desktop wakeup callback in P0; do not end the parent task with uncollected work. Use ds_followup for the same task/session. Worker corrections require ds_review revise and obey its existing issue budget. Do not duplicate a task in both agents. Use ds_fallback only after inspecting existing edits and terminal status; unknown acceptance must be reconciled, never replayed. Assign exclusive files or separate worktrees to concurrent writers, including yourself. Native DSH SDK manages context and compaction; summaries returned here do not replace native history. completed means the turn ended, not that requested artifacts or commands passed: inspect warnings, real tool results and actual artifacts before acceptance. Token caps are per model request, not total task cost. Diagnose failures using failure.kind, stage, certainty, code and network evidence. A timeout, channel loss, or runtime aborted state does not prove laptop offline or a caller-requested stop. Unknown remote state must be reconciled using the retained identity; never automatically redispatch or switch backends after connection loss.',
+    instructions: 'Optional native DSH bridge. Explicit role controls presentation: sub is a subordinate task with invocation-only inline content and full native history in the side view; peer is independent parallel cooperation, side view only. Do not infer role from running counts or change presentation when another task ends. Choose role explicitly at dispatch and retain it across followups. Each ds_start and ds_followup returns its own observation.call_id on the same persistent agent/session. Keep the call_id when reopening an invocation. Inline history is bounded to that invocation and freezes at settlement; the side view retains complete native history. Observe is allowed whenever a current entry is missing or needs reattaching; reuse a working entry instead of duplicating it. No rule forbids the tool calls needed for observation, and MCP cannot promise to hide Codex tool-call rows. If a Codex reply ends while the agent is still active, use ds_observe with freeze:true to seal that invocation view without stopping execution. Use a host conversation identity when provided; otherwise supply conversation_id consistently if known. Unknown identity must not expose the global task list. For independent authorized tasks, dispatch multiple peer tasks before collecting. Continue independent parent work and collect with ds_wait only when results are needed. timeoutMs<=50000; timeout means pending, not completion. Native roots/resident runtimes are capped by ds_bridge maxParallel, not all children or worker tasks. Native DSH owns context and compaction. Worker revisions require ds_review revise and the existing issue budget. completed is protocol settlement, not artifact acceptance; inspect actual tools and artifacts. Do not duplicate tasks or replay unknown acceptance. Connection loss does not prove laptop offline or caller stop; inspect failure evidence and reconcile the same identity. Separate concurrent writers by files/worktrees. Output caps are per-request, not total cost. There is no native Codex wakeup callback in this preview.',
   });
-  const add = (name, description, inputSchema, handler, presentation = {}) => server.registerTool(name, { description, inputSchema, ...presentation }, async args => {
+  const add = (name, description, inputSchema, handler, presentation = {}) => server.registerTool(name, { description, inputSchema, ...presentation }, async (args, extra) => {
     try {
-      const result = await handler(args);
+      const result = await handler(args, extra);
       return { content: [{ type: 'text', text: JSON.stringify(result) }], structuredContent: result };
     } catch (error) {
       return { isError: true, content: [{ type: 'text', text: String(error.message) }] };
@@ -46,7 +47,7 @@ if (arg) {
       await mkdir(dir, { recursive: true });
       await appendFile(join(dir, 'native-ui-evidence.jsonl'), JSON.stringify({ ...args, at: new Date().toISOString() }) + '\n');
     },
-    resolveTask: (id,wait) => bridge.resolveTask(id,wait),
+    resolveTask: (id,wait,callId) => bridge.resolveTask(id,wait,callId),
     retainView: id => nativeBridge.retainView(id),
     workerEvents: (id,after,limit) => worker.events(id,after,limit),
     listTasks: async () => (await bridge.list()).items,
@@ -66,12 +67,13 @@ if (arg) {
     if (enabled !== undefined||maxParallel!==undefined) await bridge.configure({enabled,maxParallel});
     return bridge.list();
   });
-  add('ds_start', 'Start a persistent DSH task asynchronously. backend:native uses the original native harness and body stream; backend:worker uses the retained configured deepseek_worker through MCP, with durable wrapper and worker_agent_id identities. Worker requires stable issue_id and ds_review(pass/revise) before revision; it cannot promise native UI streaming or subagents. An explicit unsupported maxTokens is rejected before dispatch, never silently dropped. Native light defaults to 8192 output tokens/request, coding to 32768; caps are not context or total-cost limits. Continue independent parent work and collect with ds_wait. Caller prepares cwd/separate worktrees; role peer/sub is an organizational label. subagents:true mounts official native delegation. User takeover is not implemented; native message input is hidden. Never duplicate an unknown or possibly running task on the other backend; inspect and stop/reconcile first.', {
+  add('ds_start', 'Start a persistent DSH task asynchronously. backend:native uses the original native harness and body stream; backend:worker uses the retained configured deepseek_worker through MCP, with durable wrapper and worker_agent_id identities. Worker requires stable issue_id and ds_review(pass/revise) before revision; it cannot promise native UI streaming or subagents. An explicit unsupported maxTokens is rejected before dispatch, never silently dropped. Native light defaults to 8192 output tokens/request, coding to 32768; caps are not context or total-cost limits. Continue independent parent work and collect with ds_wait. Caller prepares cwd/separate worktrees; role sub/peer controls inline versus side-only presentation. subagents:true mounts official native delegation. User takeover is not implemented; native message input is hidden. Never duplicate an unknown or possibly running task on the other backend; inspect and stop/reconcile first.', {
     task: z.string().min(1).describe('Self-contained bounded task, artifacts to produce, verification and concise final delivery.'),
     cwd: z.string().min(1).describe('Absolute task workspace; separate worktree for concurrent code writers.'),
     name: z.string().max(100).optional(),
     mode: z.enum(['light', 'coding']).default('light'),
-    role: z.enum(['sub', 'peer']).default('peer'),
+    role: z.enum(['sub', 'peer']).default('sub').describe('Choose explicitly: sub = invocation-only inline plus full side history; peer = independent parallel agent, side view only. Not inferred from concurrency.'),
+    conversation_id: z.string().min(1).max(200).optional().describe('Current Codex conversation identifier if known; host openai/session metadata takes precedence. Never invent another chat identity.'),
     subagents: z.boolean().default(false),
     ops:z.enum(['off','files','full']).default('off').describe('Opt-in original dsh-ops@0.3.0: files enables native file tools; full also enables bundled shell. Requires separately installed isolated OPS profiles. Full workspace-write shell may prepare directory permissions via the plugin; do not use it to bypass a pending permission decision. Background/PTC remain disabled. Retained worker OPS support is unverified.'),
     backend: z.enum(['native', 'worker']).default('native'),
@@ -82,10 +84,8 @@ if (arg) {
     provider: z.string().optional(),
     effort: z.string().optional(),
     maxTokens: z.number().int().min(1024).max(32768).optional().describe('Caller-selected per-request output cap, 1024..32768. Choose to fit the bounded task; omission uses the mode preset. Existing followups retain this cap. Not a total task budget.'),
-  }, args => bridge.start(args), {
-    // P0-A single entry: the dispatch call itself renders the task card, so
-    // one dsh-xxx row owns the whole task lifecycle; collection and
-    // observation ride the card instead of separate user-visible calls.
+  }, (args,extra) => bridge.start({...args,conversation_id:conversationIdentity(args,extra)}), {
+    // Per-invocation UI declaration; not a promise to hide host tool rows.
     title: 'DS 任务',
     _meta: { ui: { resourceUri } },
   });
@@ -95,7 +95,8 @@ if (arg) {
   add('ds_followup', 'Continue an idle task with the same backend, workspace and retained conversation. Native output cap is retained. Worker requires ds_review revise, obeys its correction cap, and retains worker_agent_id. Unknown acceptance cannot be replayed.', {
     agent_id: agent,
     task: z.string().min(1),
-  }, ({ agent_id, task }) => bridge.followup(agent_id, task));
+    conversation_id: z.string().min(1).max(200).optional(),
+  }, ({ agent_id, task, conversation_id },extra) => bridge.followup(agent_id, task, {conversation_id:conversationIdentity({conversation_id},extra)}), {title:'DS 续接',_meta:{ui:{resourceUri}}});
   add('ds_review','Review a settled worker delivery as pass or revise after inspecting actual artifacts. The retained worker owns correction limits; do not bypass takeover_required with a new issue_id. Not a native-session review ledger.',{
     agent_id:agent,verdict:z.enum(['pass','revise']),feedback:z.string().min(1).max(12000),
   },({agent_id,verdict,feedback})=>bridge.review(agent_id,verdict,feedback));
@@ -114,13 +115,15 @@ if (arg) {
     annotations: { readOnlyHint: true }, _meta: { ui: { visibility: ['model', 'app'] } },
   });
   add('ds_observe', nativeMcpUi
-    ? 'Attach the original DSH frontend to one existing task using the MCP carrier. Exact native session navigation and the executing runtime own the live body; opening the view sends no model prompt. Ordinary user message input is hidden. Use only to attach a missing/old task card, not as a second progress entry.'
+    ? 'Attach the original DSH frontend to one existing task using the MCP carrier. Exact native session navigation and the executing runtime own the live body; opening the view sends no model prompt. Ordinary user message input is hidden. Attach whenever the desired invocation has no usable entry; retain its call_id. Side view shows full native history. freeze:true seals only the invocation view, never stops the task.'
     : 'Attach the legacy official-Web iframe card to an existing task. It requires an available per-task URL or explicitly enabled legacy replay; the host may block loopback frames. Prefer the MCP native UI switch on verified hosts. Opening the view sends no model prompt.', {
     agent_id: agent,
-  }, ({ agent_id }) => bridge.status(agent_id), {
+    call_id: z.string().uuid().optional(),
+    freeze: z.boolean().default(false),
+  }, ({ agent_id, call_id, freeze }) => freeze?bridge.freezeObservation(agent_id,call_id):bridge.resolveTask(agent_id,false,call_id), {
     title: '查看 DS 执行过程', annotations: { readOnlyHint: true }, _meta: { ui: { resourceUri } },
   });
-  add('ds_panel', 'Open the DSH observer as an optional conversation side-panel entrypoint on compatible hosts. Same official-UI container as ds_observe: select a task for status, children and takeover hints; the embedded native UI owns all conversation rendering. UI placement depends on host support.', {}, () => bridge.list(), {
+  add('ds_panel', 'Open the DSH observer as an optional conversation side-panel entrypoint on compatible hosts. Same official-UI container as ds_observe: select a task for status, children and takeover hints; the embedded native UI owns all conversation rendering. UI placement depends on host support. Scope the list to this Codex conversation; without identity, anchor it to an explicit agent.', {agent_id:agent.optional(),conversation_id:z.string().min(1).max(200).optional()}, async(args,extra) => {const all=await bridge.list();const anchor=args.agent_id?await bridge.status(args.agent_id):null;return {...all,items:tasksInConversation(all.items,anchor,conversationIdentity(args,extra))};}, {
     title: 'DS 并行任务', annotations: { readOnlyHint: true },
     _meta: { ui: { resourceUri }, 'openai/ui': { entrypoints: [{ type: 'thread' }] } },
   });

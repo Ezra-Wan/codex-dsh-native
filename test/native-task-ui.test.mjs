@@ -5,6 +5,7 @@ import { registerSessionTarget } from '../ui/native-session-target.mjs';
 import { createNativeDisplayMode, registerNativePresentation } from '../ui/native-presentation.mjs';
 import { nativeTaskBootstrap } from '../src/native-task-bootstrap.mjs';
 import { splitNativeFonts } from '../ui/native-fonts.mjs';
+import { registerNativeObservation } from '../ui/native-observation.mjs';
 import { registerNativeTaskUi } from '../src/native-task-ui.mjs';
 import { readFile } from 'node:fs/promises';
 import { runInNewContext } from 'node:vm';
@@ -17,11 +18,12 @@ test('the installed native module parser accepts our receiver and rejects its pr
   runInNewContext(source,{window:{__ModuleLoader__:{load:entry=>{factory=entry.factory;}}}});
   const {parseBootManifest}=factory(()=>{throw new Error('The native parser needs no external module');});
   const workspace='@deepseek-ai/dsh-client-ui-workspace';
-  const deps=[workspace,'@deepseek-ai/dsh-client-ui-layout','@deepseek-ai/dsh-client-ui-sidebar-right','@deepseek-ai/dsh-client-locale'];
+  const deps=['@deepseek-ai/dsh-client-ui-conversation',workspace,'@deepseek-ai/dsh-client-ui-layout','@deepseek-ai/dsh-client-ui-sidebar-right','@deepseek-ai/dsh-client-locale'];
   const boot={rev:'native-receiver-contract',entries:deps.map(id=>({id,url:'/workspace.js',rev:'1'})),
     batches:[{phase:'application',url:'/workspace.js',rev:'1',entries:deps}]};
   registerSessionTarget({loader:{load(){}},boot,readTarget:()=>undefined});
   registerNativePresentation({loader:{load(){}},boot,mode:createNativeDisplayMode(),doc:{}});
+  registerNativeObservation({loader:{load(){}},boot,context:{},sessionId:'test'});
   assert.doesNotThrow(()=>parseBootManifest(boot));
   boot.batches.pop();
   assert.throws(()=>parseBootManifest(boot),/belongs to no initial-load batch/);
@@ -167,4 +169,19 @@ test('worker view is explicit, updates without native bootstrap, and releases on
   assert.deepEqual(updated,['completed']);assert.equal(calls.filter(name=>name==='native_bootstrap').length,1);
   await controller.select({agent_id:'native',backend:'native'});await controller.dispose();
   assert.deepEqual(disposed,['native','worker','native']);
+});
+
+test('same agent continuation mounts the new invocation and retains call_id during native bootstrap', async () => {
+  const calls=[],disposed=[],updates=[];
+  const controller=createNativeTaskController({
+    call:async(name,args)=>{calls.push({name,args});return{viewId:args.call_id,task:{runtimeGeneration:1}};},
+    mount:async data=>({update:task=>updates.push(task.observation.call_id),dispose:async()=>disposed.push(data.viewId)}),
+  });
+  await controller.select({agent_id:'A',runtimeGeneration:1,observation:{call_id:'call-1'}});
+  await controller.select({agent_id:'A',runtimeGeneration:1,observation:{call_id:'call-1',frozen:true}});
+  assert.deepEqual(updates,['call-1']);
+  await controller.select({agent_id:'A',runtimeGeneration:1,observation:{call_id:'call-2'}});
+  assert.deepEqual(disposed,['call-1']);
+  assert.deepEqual(calls.filter(x=>x.name==='native_bootstrap').map(x=>x.args.call_id),['call-1','call-2']);
+  await controller.dispose();
 });

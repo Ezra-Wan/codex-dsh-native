@@ -3,8 +3,9 @@ import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { NativeWebPeer } from './native-web-peer.mjs';
 import { nativeTaskBootstrap } from './native-task-bootstrap.mjs';
+import { conversationIdentity, tasksInConversation } from './call-observation.mjs';
 
-export const NATIVE_TASK_URI = 'ui://dsh-native/task-v12.html';
+export const NATIVE_TASK_URI = 'ui://dsh-native/task-v13.html';
 const publicTask = ({ nativeUrl, ...task }) => ({ ...task, nativeViewAvailable: typeof nativeUrl === 'string' });
 
 // The same registration is used by the production switch and the isolated
@@ -19,8 +20,8 @@ export function registerNativeTaskUi(server, { resolveTask, listTasks, retainVie
   const add = (name, inputSchema, handler) => server.registerTool(name, {
     description: 'Native DSH view transport. App-only; runtime permissions remain authoritative.', inputSchema,
     _meta: { ui: { visibility: ['app'] } },
-  }, async args => {
-    try { return { content: [{ type: 'text', text: 'Native view response' }], _meta: { payload: await handler(args) } }; }
+  }, async (args, extra) => {
+    try { return { content: [{ type: 'text', text: 'Native view response' }], _meta: { payload: await handler(args, extra) } }; }
     catch (error) { return { isError: true, content: [{ type: 'text', text: String(error.message).replace(/([?&]token=)[^&\s]+/g, '$1[redacted]') }] }; }
   });
   const capability = z.string().uuid();
@@ -42,14 +43,18 @@ export function registerNativeTaskUi(server, { resolveTask, listTasks, retainVie
         'openai/ui': { availableDisplayModes: ['inline', 'fullscreen'], preferredDisplayMode: 'inline' } },
     }],
   }));
-  add('native_tasks', {}, async () => ({ items: (await listTasks()).map(publicTask) }));
-  add('native_state', { agent_id: agent }, async ({ agent_id }) => publicTask(await resolveTask(agent_id, false)));
+  const callId = z.string().uuid().optional();
+  add('native_tasks', { agent_id: agent.optional(), conversation_id: z.string().min(1).max(200).optional() }, async (args, extra) => {
+    const anchor=args.agent_id?await resolveTask(args.agent_id,false):null;
+    return { items: tasksInConversation(await listTasks(),anchor,conversationIdentity(args,extra)).map(publicTask) };
+  });
+  add('native_state', { agent_id: agent, call_id: callId }, async ({ agent_id, call_id }) => publicTask(await resolveTask(agent_id, false, call_id)));
   add('native_worker_events',{agent_id:agent,after:z.union([z.number().int().min(-1),z.string().max(2000)]).default(-1),limit:z.number().int().min(1).max(50).default(20)},async({agent_id,after,limit})=>{
     if((await resolveTask(agent_id,false)).backend!=='worker'||!workerEvents)throw Error('This is not a worker-backed task');
     return workerEvents(agent_id,after,limit);
   });
-  add('native_bootstrap', { agent_id: agent }, async ({ agent_id }) => {
-    const task = await resolveTask(agent_id, true);
+  add('native_bootstrap', { agent_id: agent, call_id: callId }, async ({ agent_id, call_id }) => {
+    const task = await resolveTask(agent_id, true, call_id);
     if (!task.nativeUrl) throw new Error('This task has no live native view; continue the task to reopen its runtime');
     if (views.size >= 16) throw new Error('Too many open native views; close an old view first');
     const release = await retainView?.(agent_id);

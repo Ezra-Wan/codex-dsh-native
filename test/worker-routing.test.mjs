@@ -27,7 +27,7 @@ test('actual bridge MCP routes worker start, observe, opaque events, review and 
     await call('ds_followup',{agent_id:receipt.agent_id,task:'revision'});
     const second=await call('ds_wait',{agent_id:receipt.agent_id,timeoutMs:5000});assert.equal(second.final,'FOLLOWUP_OK');assert.equal(second.worker_agent_id,first.worker_agent_id);
     await call('ds_review',{agent_id:receipt.agent_id,verdict:'pass',feedback:'fixture result verified'});
-    assert.equal((await call('ds_panel')).items.length,1);assert.equal(JSON.parse(await readFile(remote,'utf8')).starts,1);
+    assert.equal((await call('ds_panel',{agent_id:receipt.agent_id})).items.length,1);assert.equal(JSON.parse(await readFile(remote,'utf8')).starts,1);
   }finally{await client.close();await rm(root,{recursive:true,force:true});}
 });
 

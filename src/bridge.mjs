@@ -268,7 +268,7 @@ export class Bridge {
     entry.cancelSource = null;
     Object.assign(record, {
       status: 'starting', turn: record.turn + 1, updatedAt: new Date().toISOString(),
-      error: null, failure: null, final: '', finishReason: null, usage: null, progress: { eventCount: 0 }, warnings: [], recentActions: [],
+      error: null, failure: null, final: '', resultPath: null, finishReason: null, usage: null, progress: { eventCount: 0 }, warnings: [], recentActions: [],
       // A continuation resumes the same native conversation. Keep descendant
       // identities available for historical inspection across parent turns.
       children: record.children ?? {}, userTakeover: null,

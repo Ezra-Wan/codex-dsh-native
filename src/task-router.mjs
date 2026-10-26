@@ -1,5 +1,6 @@
-import {realpath} from 'node:fs/promises';
+import {realpath,readFile} from 'node:fs/promises';
 import {bridgeTaskResolver} from './native-task-ui.mjs';
+import {updateObservation} from './call-observation.mjs';
 
 const active=new Set(['starting','running','stopping','unknown']);
 const canonical=async path=>{const value=await realpath(path);return process.platform==='win32'?value.toLowerCase():value;};
@@ -56,6 +57,22 @@ export class TaskRouter {
       return result;
     }finally{await held.release();}
   });}
-  async resolveTask(id,wait=false){return await this.worker.has(id)?this.worker.status(id):this.resolveNative(id,wait);}
+  async resolveTask(id,wait=false,callId){
+    const backend=await this.backend(id);
+    const current=backend===this.worker?await this.worker.status(id):await this.resolveNative(id,wait);
+    if(!callId)return current;
+    const record=await backend.read(id),scoped=backend.summary(record,callId);
+    if(callId!==record.currentCallId&&scoped.resultPath){
+      const final=await readFile(scoped.resultPath,'utf8');
+      scoped.final=final.slice(0,record.returnChars);scoped.resultTruncated=scoped.final.length<final.length;
+    }
+    return {...current,...scoped};
+  }
+  async freezeObservation(id,callId){
+    const backend=await this.backend(id),record=await backend.read(id);
+    if(callId&&callId!==record.currentCallId)return this.resolveTask(id,false,callId);
+    updateObservation(record,{freeze:true});await backend.save(record);
+    return this.resolveTask(id,false,callId);
+  }
   async close(){this.closing=true;await this.gate;const worker=await this.worker.close();await this.native.close();return worker;}
 }
