@@ -11,7 +11,8 @@ import { observeNativeRendering } from './native-render-evidence.mjs';
 import { mountWorkerFallback } from './worker-fallback.mjs';
 import {createObservationContext,registerNativeObservation} from './native-observation.mjs';
 
-const app = new App({ name: 'DSH native task', version: '1' }, { availableDisplayModes: ['inline', 'fullscreen'] }, { autoResize: false });
+const sideEntry=globalThis.__DSH_SIDE_ENTRY__===true;
+const app = new App({ name: 'DSH native task', version: '1' }, { availableDisplayModes: sideEntry?['fullscreen']:['inline', 'fullscreen'] }, { autoResize: false });
 const root = document.getElementById('root'), status = document.getElementById('state'), tasks = document.getElementById('tasks');
 function renderTaskStatus(task){document.title=taskIdentity(task);status.textContent=`${taskIdentity(task)} · ${task.status}${task.observation?.frozen?' · 当次记录已固定':''}${task.failure?.label?' · '+task.failure.label:''}`;status.title=task.error??'';}
 function showLoading(message, busy = true) {
@@ -92,10 +93,13 @@ async function present(task){
   if(sideOnly){
     await controller.clear();
     if(layout.mode==='fullscreen'||currentTask?.agent_id!==task.agent_id)return;
-    status.textContent='并行协作 · 在侧边查看完整历史';
-    await app.sendSizeChanged({height:34}).catch(()=>{});
+    // The declared peer resource is fullscreen-only. Never leave an inline
+    // placeholder requiring a second click when a host ignores that contract.
+    document.getElementById('native-toolbar').hidden=true;
+    await requestNativeViewClose(app).catch(()=>{});
     return;
   }
+  document.getElementById('native-toolbar').hidden=false;
   renderTaskStatus(task);await controller.select(task);
 }
 
@@ -140,7 +144,7 @@ window.addEventListener('unhandledrejection', event => { void signal('rejection'
 app.onteardown = async () => { clearInterval(timer); await controller.dispose(); return {}; };
 await app.connect();
 await layout.context(app.getHostContext());
-void signal('native-card-connected', `task-v13; ${crypto.randomUUID()}; autoResize=false; closeExtension=${typeof globalThis.openai?.requestClose === 'function'}`);
+void signal('native-card-connected', `task-v14; ${crypto.randomUUID()}; autoResize=false; closeExtension=${typeof globalThis.openai?.requestClose === 'function'}`);
 await installNativeFonts(globalThis.__DSH_NATIVE_FONTS__ ?? []);
 delete globalThis.__DSH_NATIVE_FONTS__;
 timer = setInterval(async () => {
