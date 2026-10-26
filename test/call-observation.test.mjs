@@ -37,6 +37,23 @@ test('host conversation identity wins; missing identity never exposes the global
   assert.throws(() => beginObservation({ conversationId: 'chat-A' }, 'chat-B'), /different Codex conversation/);
 });
 
+test('historical usage and finish reason belong to that invocation, never to a later response',()=>{
+  const record={turn:1,status:'running'};
+  const first=beginObservation(record);record.status='completed';
+  record.usage={inputTokens:1171,outputTokens:327,cacheReadTokens:4480};record.finishReason='completed';
+  updateObservation(record);
+  record.turn=2;record.status='running';beginObservation(record);
+  record.usage={inputTokens:173,outputTokens:364};record.finishReason='max_tokens';
+  const old=observationSummary(record,first.call_id);
+  assert.deepEqual(old.usage,{inputTokens:1171,outputTokens:327,cacheReadTokens:4480});
+  assert.equal(old.finishReason,'completed');
+  assert.equal(observationSummary(record).usage,undefined,'the current invocation uses its live usage');
+  delete record.observations[first.call_id].usage;delete record.observations[first.call_id].finishReason;
+  const legacy=observationSummary(record,first.call_id);
+  assert.equal(legacy.usage,null,'a legacy call without a snapshot must not inherit the current bill');
+  assert.equal(legacy.finishReason,null);
+});
+
 test('native start and continuation persist separate ranges on one session; old range survives reopen', async t => {
   const root = await mkdtemp(join(tmpdir(), 'dsh-call-range-'));
   const runs = [];
