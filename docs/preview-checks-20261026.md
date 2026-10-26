@@ -23,3 +23,13 @@
 ## 发布结果
 
 仓库已公开；[预览 Release](https://github.com/Ezra-Wan/codex-dsh-native/releases/tag/v0.1.2-preview.1)已发布，源码标签207971e。[GitHub Windows/Node24 CI](https://github.com/Ezra-Wan/codex-dsh-native/actions/runs/40210942102)成功。无认证请求可读取Release并下载430382字节源码包，SHA256为 deeb27c48668a63dc3642ecc7203e618b13d892e8d4d22f817f58a1c8ecef176，与上传前一致。此次额外文档记录不改变已发布源码标签。
+
+
+## v0.1.3-preview.1 发布结果与边界
+
+- 新预览 [v0.1.3-preview.1](https://github.com/Ezra-Wan/codex-dsh-native/releases/tag/v0.1.3-preview.1) 已公开发布为 prerelease；不可变源码标签 `e2bee73995080b3751d8fad00fc451e00964971d`。旧标签与资产保留。
+- 本地最终源码构建与离线检查131/131通过；[GitHub Windows/Node24 独立回归](https://github.com/Ezra-Wan/codex-dsh-native/actions/runs/40262110663)成功。实际宿主、真实模型和完整操作回归由用户回来后进行，不把旧版目视验收移植到新规则。
+- Git全可达引用扫描116个非合并提交、约1.90MB未发现凭据；完整解码夹具约77KB再次扫描无发现，夹具与旧预览没有改动。报告留在仓库外的本机临时目录。
+- `git archive` 源码包164项、451110字节，不含运行目录、node_modules、dist或凭据；上游 BoundConversation 的 MIT许可与来源随包保留。无登录下载公开资产后，SHA256为 `c311fd0cc1bb9410cf6b16263e37f1059ec15c9a1697b469440f9a13e4c6ed87`，与本地上传前一致。
+- 本轮未改主配置、未重载主/第二实例、未启动展示服务、未新调模型。源码已合并推送；现用实例未自动切换。回来验收前，先构建本地UI，再仅重载隔离测试实例，确认 `CODEX_DSH_UI=mcp` 和 `task-v13.html`；不要把仍运行的旧实例当作新预览。
+- 功能与限制详见 [本版说明](preview-v0.1.3.md)，包括原生调用范围、sub/peer区别、侧边完整历史、可选宿主对话身份、早结束时显式固定，以及旧worker的降级范围。
