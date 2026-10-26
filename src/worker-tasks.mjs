@@ -1,3 +1,4 @@
+import {beginObservation, updateObservation, observationSummary} from './call-observation.mjs';
 import { mkdir,readFile,readdir,rm,stat,writeFile } from 'node:fs/promises';
 import { isAbsolute,join,resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -29,6 +30,7 @@ export class WorkerTasks {
     return record.stateRecoveredFromBackup?{...record,status:'unknown',submission:'uncertain',error:'Task state recovered from backup; reconcile worker identity before continuing.'}:record;
   }
   save(record){
+    updateObservation(record);
     const snapshot=structuredClone(record),id=record.agent_id;
     const p=(this.writes.get(id)??Promise.resolve()).catch(()=>{}).then(()=>atomicJson(this.path(id),snapshot));
     this.writes.set(id,p);return p;
@@ -46,7 +48,7 @@ export class WorkerTasks {
     const entry={record,busy:false,release:()=>rm(path,{recursive:true,force:true})};
     this.entries.set(id,entry);return entry;
   }
-  summary(record){
+  summary(record,callId){
     const final=(record.final??'').slice(0,record.returnChars);
     return{agent_id:record.agent_id,session_id:null,backend:'worker',worker_agent_id:record.workerAgentId??null,
       name:record.name,cwd:record.cwd,permission:record.permission,role:record.role,mode:record.mode,
@@ -56,7 +58,7 @@ export class WorkerTasks {
       ...(record.failure?{failure:record.failure}:{}),
       progress:record.progress??{},...(record.source_agent_id?{source_agent_id:record.source_agent_id}:{}),
       ...(record.resultPath?{final,resultPath:record.resultPath,resultTruncated:final.length<(record.final??'').length}:{}),
-      ...(record.finishReason?{finishReason:record.finishReason}:{}),nativeViewAvailable:false};
+      ...(record.finishReason?{finishReason:record.finishReason}:{}),nativeViewAvailable:false,...observationSummary(record,callId)};
   }
   async start(args){return this.serial(async()=>{
     if(this.closed)throw Error('Worker task adapter is closed');
@@ -74,11 +76,12 @@ export class WorkerTasks {
     await this.worker.startArguments(remoteArgs);
     const record={agent_id:id,backend:'worker',name:args.name??'worker fallback',cwd:remoteArgs.cwd,permission,role,mode,
       issue_id:remoteArgs.issue_id,marker,model:args.model??null,maxTokens:args.maxTokens??null,returnChars:MODES[mode].returnChars,
-      status:'starting',submission:'prepared',turn:1,createdAt:new Date().toISOString(),
+      status:'starting',submission:'prepared',turn:1,createdAt:new Date().toISOString(),conversationId:args.conversation_id,
       warnings:['Worker fallback uses the retained worker harness. Native MCP body streaming is unavailable on this backend.',
         'Native profile plugins are not inherited by this worker backend.',
         ...(!args.maxTokens?['Per-task output cap is owned by the worker policy, not the native light/coding preset.']:[])],
       ...(args.source_agent_id?{source_agent_id:args.source_agent_id}:{})};
+    beginObservation(record,record.conversationId);
     const entry=await this.own(record);await this.save(record);
     this.run(entry,()=>this.worker.start(remoteArgs));
     return this.summary(record);
@@ -119,7 +122,7 @@ export class WorkerTasks {
     if(record.status==='completed'){
       if(typeof value.answer!=='string'||!value.answer.trim()){record.status='failed';record.error='Worker settled without a final answer';}
       else{
-        record.final=value.answer;record.resultPath=join(this.root,`${record.agent_id}.result.txt`);
+        record.final=value.answer;record.resultPath=join(this.root,`${record.agent_id}.turn-${record.turn}.result.txt`);
         await writeFile(record.resultPath,value.answer,'utf8');
       }
     }
@@ -166,14 +169,17 @@ export class WorkerTasks {
     if(entry?.busy&&timeoutMs)try{await Promise.race([entry.done,new Promise(resolve=>{timer=setTimeout(resolve,timeoutMs);})]);}finally{clearTimeout(timer);}
     return this.status(id);
   }
-  async followup(id,task){return this.serial(async()=>{
+  async followup(id,task,{conversation_id}={}){return this.serial(async()=>{
     if(this.closed||!await this.enabled())throw Error('Bridge is closed or disabled');
     const record=await this.read(id),entry=await this.own(record);
     if(entry.busy||ACTIVE.has(record.status))throw Error('Worker task is active or uncertain; inspect or stop it before followup');
     if(!record.workerAgentId||!task?.trim())throw Error('Missing worker identity or followup task');
     // The retained worker, not this adapter, owns review and correction caps.
     if(record.review?.phase!=='revision_ready'||record.review?.last_verdict!=='revise'||record.review.takeover_required)throw Error('Review this worker delivery as revise before followup; exhausted corrections require parent takeover');
+    if(conversation_id&&record.conversationId&&conversation_id!==record.conversationId)throw Error('Task belongs to a different Codex conversation');
+    if(conversation_id)record.conversationId=conversation_id;
     record.expectedRevision=(record.review.revision_round??0)+1;record.turn++;record.status='starting';record.final='';record.resultPath=null;record.error=null;
+    beginObservation(record,record.conversationId);
     record.failure=null;record.stopRequestedSource=null;
     await this.save(record);this.run(entry,()=>this.worker.followup(record.workerAgentId,task));return this.summary(record);
   });}

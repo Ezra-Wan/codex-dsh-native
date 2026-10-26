@@ -8,6 +8,7 @@ import { join, resolve } from 'node:path';
 import { createRuntime, writeWebEmbedPatch } from '../src/runtime.mjs';
 import { registerNativeTaskUi, NATIVE_TASK_URI } from '../src/native-task-ui.mjs';
 import { NativeWebPeer } from '../src/native-web-peer.mjs';
+import { readNativeEvents } from '../src/trace.mjs';
 
 const root = process.env.DSH_MCP_UI_PROBE_ROOT, profiles = process.env.DSH_MCP_UI_PROBE_PROFILES;
 const port = Number(process.env.DSH_MCP_UI_PROBE_PORT ?? 19071);
@@ -16,7 +17,8 @@ delete process.env.DEEPSEEK_API_KEY; delete process.env.OPENAI_API_KEY;
 const fixtureId = 'bc243aa7-57aa-47b5-b219-c73a6a45c5ed';
 const secondFixtureId = '19c2730d-351e-461d-93b5-f888293eb07c';
 const states = new Map(['aaaaaaaa-0000-4000-8000-000000000001','bbbbbbbb-0000-4000-8000-000000000002'].map((agent_id,index) => [agent_id, {
-  task: { agent_id, session_id: index ? secondFixtureId : fixtureId, name: `原生验收 ${index ? 'B' : 'A'}`, role: 'peer', backend: 'native',
+  task: { agent_id, session_id: index ? secondFixtureId : fixtureId, name: `原生验收 ${index ? 'B' : 'A'}`, role: 'sub', backend: 'native',
+    conversation_id: 'isolated-native-fixture',
     status: 'waiting', runtimeGeneration: 1, nativeUrl: null }, index,
 }]));
 const facts = { modelCalls: 0, originalFrontend: true, productionCarrier: true, visualAcceptance: 'pending', signals: [] };
@@ -50,6 +52,11 @@ async function ensure(state) {
     try { await symlink(resolve(profiles),join(home,'profiles'),'junction'); } catch(error) { if(error.code!=='EEXIST')throw error; }
     await cp(new URL('../test/fixtures/sessions/',import.meta.url),join(home,'sessions'),{recursive:true});
     if(state.index)await addDistinctFixture(home);
+    const history=await readNativeEvents(home,state.task.session_id,-1,50);
+    const start=history.events.findLast(event=>event.type==='turn/start');
+    const end=history.events.findLast(event=>event.type==='turn/end');
+    if(!start||!end||history.hasMore)throw new Error('Fixture needs one fully read native invocation');
+    state.task.observation={call_id:state.task.agent_id,turn:1,start_seq:start.seq,end_seq:end.seq,frozen:true,status:'fixture'};
     const urlFile=join(dir,'native-url.json'); await rm(urlFile,{force:true});
     const patch=await writeWebEmbedPatch(dir,{port:port+state.index,urlFile});
     state.runtime=createRuntime({cwd,provider:'deepseek-official',model:'deepseek-v4-flash',maxTokens:1024,permission:'read-only',effort:'off'}, {home,profile:'sdk-web',patches:[patch]});

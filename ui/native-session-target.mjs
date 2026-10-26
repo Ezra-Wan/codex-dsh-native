@@ -25,7 +25,7 @@ export function registerSessionTarget({ loader, boot, readTarget, onNavigate = (
       };
       const unsubscribe = ctx.sessions.list.subscribe(schedule);
       const unsubscribeWorkspaces = ctx.workspaces.list.subscribe(schedule);
-      const off = readTarget.subscribe?.(schedule);
+      const off = readTarget.subscribe?.(() => { selected = undefined; schedule(); });
       schedule();
       return () => { disposed = true; unsubscribe(); unsubscribeWorkspaces(); off?.(); };
     },
