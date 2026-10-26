@@ -2,13 +2,13 @@
 
 独立项目，初始实现日期：2026-10-22。
 
-**[开发者预览 v0.1.2-preview.1](https://github.com/Ezra-Wan/codex-dsh-native/releases/tag/v0.1.2-preview.1)** · [自动回归](https://github.com/Ezra-Wan/codex-dsh-native/actions/workflows/ci.yml)：[安装、适用环境与已知限制](docs/preview-v0.1.2.md)。自有代码采用 [MIT](LICENSE)，第三方原版权和许可保持不变；这不是 OpenAI 或 DSH 的官方发行版。
+**[开发者预览 v0.1.3-preview.1](https://github.com/Ezra-Wan/codex-dsh-native/releases/tag/v0.1.3-preview.1)** · [自动回归](https://github.com/Ezra-Wan/codex-dsh-native/actions/workflows/ci.yml)：[安装、适用环境与已知限制](docs/preview-v0.1.3.md)。自有代码采用 [MIT](LICENSE)，第三方原版权和许可保持不变；这不是 OpenAI 或 DSH 的官方发行版。
 
 本项目以 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 原版 SDK/Web 为基础，复用其 WorkerTunnel 与事件契约、[DSH-for-Vscode](https://github.com/k2124732496-lab/DSH-for-Vscode) 的会话导航来源代码，并可选接入原版 OPS 和 [Codex Whale](https://github.com/Yang-huai406/Codex-Whale-Public)。我们主要增加 MCP 传输、任务生命周期与宿主适配，具体来源与改动见 [第三方声明](THIRD-PARTY-NOTICES.md)。
 
 Codex 保留自己的登录、工作区与运行环境；DeepSeek 在官方 DSH 的完整 SDK profile 中工作。桥接负责发任务、保留会话身份、展示原生执行事件、等待结果和中断，不自己实现模型循环、工具体系或上下文压缩。
 
-**当前状态（2026-10-26）：原版正文流、历史与 worker 基础兜底已有目视确认；116/116 离线通过。新增连接故障分类及失联任务防重派发，详见[诊断说明](docs/connection-diagnostics-20261025.md)。新增 OPS 文件工具及冷续接、同父双子并发实测、动态根并发1–8、第二实例常驻原版小鲸鱼。OPS 并发 Shell 一成功一失败，费用估算、审批/压缩完整交互、接管与主实例迁移仍未完成。** 详见 [本轮 OPS/并发/余额报告](docs/ops-balance-concurrency-20261025.md)。
+**当前状态（2026-10-26）：旧版原版正文流、历史与 worker 基础兜底已有目视确认。本版新增按调用范围显示、sub/peer 展示区别及续接入口，131/131 离线通过；v13 的真实宿主/模型回归待用户回到电脑后验收。新增连接故障分类及失联任务防重派发，详见[诊断说明](docs/connection-diagnostics-20261025.md)。新增 OPS 文件工具及冷续接、同父双子并发实测、动态根并发1–8、第二实例常驻原版小鲸鱼。OPS 并发 Shell 一成功一失败，费用估算、审批/压缩完整交互、接管与主实例迁移仍未完成。** 详见 [本轮 OPS/并发/余额报告](docs/ops-balance-concurrency-20261025.md)。
 
 **尚不能完全替代 work**：原生代码修改正确，但新版 Windows PowerShell 沙箱发生 Win32 5 初始化错误；同一条测试命令转交旧 worker 后真实执行成功（3 pass，已读取工具结果）。目前适合原生优先、明确失败后 worker 兜底；隔离目录的官方权限诊断修复等待用户确认。
 
@@ -53,13 +53,13 @@ Codex 保留自己的登录、工作区与运行环境；DeepSeek 在官方 DSH 
 
 ## 同一个 Codex 页面内可观察
 
-验收目标：串行任务在对话流内持续展示 DS 的实际动作；并行任务允许用户按需展开侧边内容面板，Codex 继续工作。不能把只有最终总结的工具调用当作完成，也不以另开独立监控网站替代此要求。
+验收目标：Codex 明确指定 role=sub 时，流内只展示当次问题、响应和执行细节，结束后固定；侧边查看该 agent 完整历史。role=peer 时仅支持侧边正文，不根据实际运行数量猜测。Codex 继续自己的工作。不能把只有最终总结的工具调用当作完成，也不以另开独立监控网站替代此要求。
 
-新 MCP 路径使用官方 `AppWebEntry`、实际执行运行时的原版插件和样式，任务调用本身关联原生卡片，通过 MCP 转发原生双向流；浏览器不直接访问 localhost。任务身份、运行时世代和视图 capability 分开管理，原生接收端按精确会话身份导航。旧 HTTP iframe 路径保留为默认兼容实现，本机已实测会被宿主拦截，不能记作可用的新展示路线。
+新 MCP 路径使用官方 `AppWebEntry`、实际执行运行时的原版插件和样式，派发和续接各关联当次原生卡片，通过 MCP 转发原生双向流；浏览器不直接访问 localhost。任务身份、运行时世代和视图 capability 分开管理，原生接收端按精确会话身份导航。旧 HTTP iframe 路径保留为默认兼容实现，本机已实测会被宿主拦截，不能记作可用的新展示路线。
 
 流内隐藏原生左右侧栏，侧边恢复；用户已确认 A/B 正文显示正常。展开/收起由 Codex 原生控件负责，卡片不再增加重复按钮。侧边关闭会短暂闪回流内再关闭，仍需改进。当前先隐藏桥接会话的用户输入区，正式接管状态机另行实现；真实原生子 agent、完整操作和插件能力须逐项验收。
 
-最新证据见 [2026-10-25 验收](docs/acceptance-native-ui-20261025.md)，早期时序见 [前一日收尾](docs/reuse-implementation-closeout-20261024.md)；复用来源与许可见 [第三方记录](THIRD-PARTY-NOTICES.md)。
+新规则与待验清单见 [v0.1.3 说明](docs/preview-v0.1.3.md)。旧版目视证据见 [2026-10-25 验收](docs/acceptance-native-ui-20261025.md)，早期时序见 [前一日收尾](docs/reuse-implementation-closeout-20261024.md)；复用来源与许可见 [第三方记录](THIRD-PARTY-NOTICES.md)。
 
 ## 两种默认预算
 
