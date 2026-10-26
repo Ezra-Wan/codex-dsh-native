@@ -9,8 +9,8 @@
 - [x] 流内原生 turn/end 后固定，后续同会话的新调用不追加到旧记录；未结束时可显式 ds_observe(freeze:true) 固定已提交范围而不停止任务。没有虚构 Codex 回复结束回调。
 - [x] 原版渲染器和装配器继续复用；复制上游 MIT BoundConversation 类并保留来源，适配原生事件窗口。侧边撤销当次范围限制，沿用原生历史分页。
 - [x] 删除禁止补挂观察入口、承诺隐藏工具行的 instructions；followup 本身也声明卡片资源。任务列表按宿主 openai/session 或明确 conversation_id 筛选，缺身份仅列锚定任务。
-- [x] 本地131/131离线通过；含实际 Cordis/原生装配器/加载清单、卡片模块接线、真实 stdio 对话元数据。新预览版本 v0.1.3-preview.1；发布结果另行记录，不能把计划当已发布。
-- [ ] 用户回来后：隔离第二实例先零模型，再实测同 sub 两次调用、旧记录固定与侧边全部历史、双 peer 仅侧边、跨 Codex 对话身份、冷恢复/错误/原功能回归。新行为均不得借用 v12 目视结果声称通过。
+- [x] 本地131/131离线通过；含实际 Cordis/原生装配器/加载清单、卡片模块接线、真实 stdio 对话元数据。新预览 [v0.1.3-preview.1](https://github.com/Ezra-Wan/codex-dsh-native/releases/tag/v0.1.3-preview.1) 已发布，标签 e2bee73；[GitHub 独立回归](https://github.com/Ezra-Wan/codex-dsh-native/actions/runs/40262110663)成功。无登录下载源码451110字节，SHA256已核对一致。
+- [ ] 用户回来后：先在本地源码目录运行 npm run build，再仅重载隔离第二实例的 MCP 元数据；先零模型，再实测同 sub 两次调用、旧记录固定与侧边全部历史、双 peer 仅侧边、跨 Codex 对话身份、冷恢复/错误/原功能回归。新行为均不得借用 v12 目视结果声称通过。
 - [ ] 主实例配置迁移仍待办：之前缺 CODEX_DSH_UI=mcp，且 deepseek_worker.enabled=false 会使默认兜底拒绝连接；本轮未改配置。测试时不要误用旧 iframe 或直接影响主实例。
 - [ ] 旧 worker 保留降级状态/结果/工具摘要，不具备原生正文及完整原生历史；本轮未宣称其按调用工具记录裁剪等价。瞬态未提交片段不额外复制存储，崩溃后不保证恢复。
 
