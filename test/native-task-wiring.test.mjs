@@ -3,11 +3,12 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { runInNewContext } from 'node:vm';
 import {taskIdentity} from '../ui/task-identity.mjs';
+import {createInvocationOwner} from '../ui/invocation-owner.mjs';
 import { randomUUID } from 'node:crypto';
 import { createNativeDisplayMode } from '../ui/native-presentation.mjs';
 import { createNativeTaskLayout } from '../ui/native-task-layout.mjs';
 
-async function setup(sideEntry=false) {
+async function setup(sideEntry=false,host) {
   const source = (await readFile(new URL('../ui/native-task.mjs', import.meta.url), 'utf8')).replace(/^import .*;\r?\n/gm, '');
   const calls = [], selected = [], nodes = new Map(), states = new Map();
   const node = id => nodes.get(id) ?? nodes.set(id, { style: {}, dataset: {}, options: [], hidden: false,
@@ -22,7 +23,7 @@ async function setup(sideEntry=false) {
     requestTeardown: async () => {}, requestDisplayMode: async () => { throw Error('must not force side open'); } };
   const result = await runInNewContext(`(async()=>{${source}\nreturn {receive,app,choose};})()`, {
     __DSH_SIDE_ENTRY__:sideEntry,
-    taskIdentity, App: function(_info,capabilities) { app.declaredCapabilities=capabilities;return app; }, AppWebEntry: function() {}, createNativeDisplayMode, createNativeTaskLayout,
+    taskIdentity,createInvocationOwner:()=>createInvocationOwner(host),openai:host, App: function(_info,capabilities) { app.declaredCapabilities=capabilities;return app; }, AppWebEntry: function() {}, createNativeDisplayMode, createNativeTaskLayout,
     createNativeTaskController: () => ({ select: async task => selected.push(task), clear: async () => { clears++; }, dispose: async () => {} }),
     requestNativeViewClose: async () => {}, installNativeFonts: async () => {},
     document: { getElementById: node, createElement: () => node(randomUUID()), head: node('head'),
@@ -85,4 +86,26 @@ test('settled inline invocation stops status polling; fullscreen still permits o
   h.states.set('A', task('A', 'A1', 'sub', true));
   await h.tick();
   assert.equal(h.calls.filter(c => c.name === 'native_state').length, before + 1);
+});
+
+test('a tool-result update cannot replace the original inline invocation with the next call',async()=>{
+  const h=await setup(),first=task('A','A1','sub',true),second=task('A','A2','sub',true);
+  h.receive(first);await settle();
+  h.receive(second);await settle();
+  assert.equal(h.selected.at(-1).observation.call_id,'A1','the original inline entry owns its first call');
+  assert.match(h.nodes.get('state').textContent,/子 agent/);
+  h.app.onhostcontextchanged({displayMode:'fullscreen'});await settle();
+  h.app.onhostcontextchanged({displayMode:'inline'});await settle();
+  assert.equal(h.selected.at(-1).observation.call_id,'A1');
+});
+
+test('a remounted widget uses its saved invocation when the host supplies a newer result',async()=>{
+  const id=randomUUID(),first=randomUUID(),second=randomUUID();
+  const host={widgetState:{dshInvocation:{agent_id:id,call_id:first}},setWidgetState(){}};
+  const h=await setup(false,host);
+  h.states.set(id,task(id,first,'sub',true));
+  h.receive(task(id,second,'sub',true));await settle();
+  assert.equal(h.calls.find(c=>c.name==='native_state').args.call_id,first);
+  assert.equal(h.selected.at(-1).observation.call_id,first);
+  assert.equal(h.selected.some(t=>t.observation.call_id===second),false);
 });

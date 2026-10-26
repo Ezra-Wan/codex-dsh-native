@@ -1,4 +1,5 @@
 import {taskIdentity} from './task-identity.mjs';
+import {createInvocationOwner} from './invocation-owner.mjs';
 import { App } from '@modelcontextprotocol/ext-apps';
 import { AppWebEntry } from '@deepseek-ai/dsh-client-web';
 import { createNativeMcpRpc } from './native-mcp-rpc.mjs';
@@ -31,6 +32,7 @@ const execute = code => { const el = document.createElement('script'); el.textCo
 const css = document.createElement('style'); document.head.appendChild(css);
 let selected, selectedCall, anchor, currentTask, polling = false, timer;
 let entryTask;
+const invocationOwner=createInvocationOwner();
 let lastMode;
 const nativeMode = createNativeDisplayMode();
 const layout = createNativeTaskLayout({ app, doc: document, root,
@@ -113,7 +115,23 @@ function receive(data) {
     option.textContent = taskIdentity(task);
   }
   const task = data.agent_id ? data : items.find(item => item.agent_id === selected) ?? items.at(-1);
-  if (task?.agent_id) { selectionSeq++;anchor??=task.agent_id;entryTask??=task;tasks.value=task.agent_id;void present(task); }
+  if (task?.agent_id) {
+    const seq=++selectionSeq;
+    void signal('native-tool-result',JSON.stringify({incoming:{agent_id:task.agent_id,call_id:task.observation?.call_id},owner:invocationOwner.identity,persistence:invocationOwner.persistenceAvailable}));
+    const show=value=>{anchor??=value.agent_id;tasks.value=value.agent_id;void present(value);};
+    if(!entryTask&&invocationOwner.identity&&!invocationOwner.matches(task)){
+      // A remounted old widget must resolve its saved call, never silently
+      // use a later result from the same persistent agent.
+      void rawCall('native_state',invocationOwner.identity).then(restored=>{
+        if(seq!==selectionSeq)return;
+        if(!invocationOwner.matches(restored))throw Error('Original invocation could not be restored');
+        entryTask=restored;show(restored);
+      }).catch(error=>{if(seq===selectionSeq)showLoading(error.message,false);});
+      return;
+    }
+    if(!entryTask||invocationOwner.matches(task)){invocationOwner.remember(task);entryTask=task;}
+    show(layout.mode==='fullscreen'?task:entryTask);
+  }
 }
 app.ontoolresult = result => receive(result.structuredContent);
 app.ontoolinput = ({arguments:args}) => {if(args?.role==='peer'&&layout.mode!=='fullscreen'){document.documentElement.dataset.sideOnly='true';void app.sendSizeChanged({height:34}).catch(()=>{});}};
